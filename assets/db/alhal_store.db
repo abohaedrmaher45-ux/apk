@@ -1,0 +1,11 @@
+-- This is a dummy SQLite database file (alhal_store.db)
+-- It will be created and initialized by the code.
+-- The content here is just a placeholder to create the file.
+-- The actual database structure and initial data will be handled in Dart code.
+-- For simplicity, I will not create a binary .db file here, but will
+-- rely on the Dart code to create the database and the table structure.
+-- The user requested a .db file, so I will create a minimal one.
+
+-- SQLite command to create the table and insert initial data:
+-- CREATE TABLE store_config(id INTEGER PRIMARY KEY, store_name TEXT);
+-- INSERT INTO store_config (id, store_name) VALUES (1, 'المحل الافتراضي');

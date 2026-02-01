@@ -1,0 +1,62 @@
+name: market_ledger
+description: "A new Flutter project."
+
+publish_to: 'none' 
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=2.19.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  
+  # Database
+  sqflite: ^2.3.0
+  path: ^1.9.0
+  
+  # State Management
+  provider: 6.1.5+1
+  
+  # PDF Generation for printing invoices
+  pdf: ^3.10.4
+  printing: ^5.11.1
+  
+  # Date handling
+  intl: ^0.19.0
+  
+  # Local storage for settings
+  path_provider: 2.1.5
+  shared_preferences: 2.5.3
+
+  # الحزمة التي تمكن sqflite من العمل على سطح المكتب والويب
+  sqflite_common_ffi: ^2.3.0+2 
+
+   # الحزمة الإضافية المطلوبة للويب
+  sqflite_common_ffi_web: ^0.4.2+2
+
+  # اللوغو
+  flutter_launcher_icons: ^0.13.1
+
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^2.0.0
+  
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/logo.png
+    - assets/db/alhal_store.db
+
+# 👇 قسم أيقونة التطبيق
+flutter_launcher_icons:
+  android: true
+  image_path: "assets/images/logo.png"
+  adaptive_icon_foreground: "assets/images/logo.png"
+  #adaptive_icon_background: "#FFFFFF"
