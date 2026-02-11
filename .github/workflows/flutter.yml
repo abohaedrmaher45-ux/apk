@@ -1,0 +1,199 @@
+name: Flutter CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Flutter Clean
+        run: flutter clean
+
+      - name: Flutter Pub Get
+        run: flutter pub get
+
+      - name: Build APKs (Split per ABI)
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+        run: |
+          mkdir -p android/app
+          echo "$KEYSTORE_BASE64" | base64 --decode > android/app/upload-keystore.jks
+          flutter build apk --release --split-per-abi
+
+      - name: Upload 32-bit APK (armeabi-v7a)
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apk-armeabi-v7a
+          path: build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+
+      - name: Upload 64-bit APK (arm64-v8a)
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apk-arm64-v8a
+          path: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Flutter Clean
+        run: flutter clean
+
+      - name: Flutter Pub Get
+        run: flutter pub get
+
+      - name: Setup Visual Studio C++ Build Tools
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install VC++ Redistributable
+        run: |
+          Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile "vc_redist.x64.exe"
+          Start-Process -FilePath "./vc_redist.x64.exe" -ArgumentList "/install", "/quiet", "/norestart" -Wait
+        shell: powershell
+
+      - name: Build Windows Release
+        run: flutter build windows --release
+
+      # Debug step to see folder structure
+      - name: Debug Folder Structure
+        run: |
+          Write-Host "Debugging build folders..."
+          Get-ChildItem -Path "build" -Recurse | Where-Object {$_.Name -like "*.dll" -or $_.Name -like "*.exe"} | Select-Object FullName
+        shell: powershell
+
+      # Smart DLL collection step (fixed to avoid overwriting)
+      - name: Collect Required DLLs
+        run: |
+          # Find release directory
+          $releaseDir = $null
+          $searchPaths = @(
+            "build/windows/x64/runner/Release",
+            "build/windows/runner/Release",
+            "build/windows/x64/windows/runner/Release"
+          )
+          
+          foreach ($path in $searchPaths) {
+            if (Test-Path "$path/*.exe") {
+              $releaseDir = $path
+              break
+            }
+          }
+          
+          if (-not $releaseDir) {
+            Write-Host "Error: Could not find release directory with .exe file"
+            exit 1
+          }
+          
+          Write-Host "Found release directory: $releaseDir"
+          
+          # Copy VC++ DLLs if missing
+          $vcDlls = @("msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll")
+          foreach ($dll in $vcDlls) {
+            $dest = "$releaseDir\$dll"
+            if (-not (Test-Path $dest)) {
+              $src = "C:\Windows\System32\$dll"
+              if (Test-Path $src) {
+                Copy-Item $src $dest -Force
+                Write-Host "Copied $dll from System32"
+              } else {
+                Write-Host "Warning: $dll not found in System32"
+              }
+            } else {
+              Write-Host "✅ $dll already exists"
+            }
+          }
+          
+          # Find and copy plugin DLLs (avoid overwriting)
+          $pluginDlls = @("pdfium.dll", "printing_plugin.dll", "sqlite3.x64.windows.dll")
+          foreach ($dll in $pluginDlls) {
+            $dest = "$releaseDir\$dll"
+            
+            # Skip if already exists
+            if (Test-Path $dest) {
+              Write-Host "✅ $dll already exists in release directory"
+              continue
+            }
+            
+            $found = $false
+            $searchPatterns = @(
+              "build/**/$dll",
+              "build/windows/**/$dll",
+              "build/windows/x64/**/$dll"
+            )
+            
+            :patternLoop foreach ($pattern in $searchPatterns) {
+              $files = Get-ChildItem -Path $pattern -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.FullName -ne $dest }
+              if ($files) {
+                foreach ($file in $files) {
+                  # Avoid copying from the same directory
+                  if ($file.Directory.FullName -eq $releaseDir) {
+                    continue
+                  }
+                  
+                  Copy-Item $file.FullName $dest -Force
+                  Write-Host "Copied $dll from $($file.FullName)"
+                  $found = $true
+                  break :patternLoop
+                }
+              }
+            }
+            
+            if (-not $found) {
+              Write-Host "⚠️ $dll not found - this plugin may not work on Windows"
+            }
+          }
+        shell: powershell
+
+      - name: Package as ZIP
+        run: |
+          $releaseDir = $null
+          $searchPaths = @(
+            "build/windows/x64/runner/Release",
+            "build/windows/runner/Release",
+            "build/windows/x64/windows/runner/Release"
+          )
+          
+          foreach ($path in $searchPaths) {
+            if (Test-Path "$path/*.exe") {
+              $releaseDir = $path
+              break
+            }
+          }
+          
+          if (-not $releaseDir) {
+            Write-Host "Error: Could not find release directory for ZIP"
+            exit 1
+          }
+          
+          $zipPath = "windows-app.zip"
+          Compress-Archive -Path "$releaseDir/*" -DestinationPath $zipPath -Force
+          Write-Host "Created ZIP file: $zipPath"
+        shell: powershell
+
+      - name: Upload ZIP Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-windows-x64-zip
+          path: windows-app.zip

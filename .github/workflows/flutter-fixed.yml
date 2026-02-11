@@ -1,0 +1,463 @@
+name: Flutter CI (Fixed)
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          flutter-version: '3.35.4'  # تحديد الإصدار بدقة
+
+      - name: Flutter Clean
+        run: flutter clean
+
+      - name: Flutter Pub Get
+        run: flutter pub get
+
+      - name: Build APKs (Split per ABI)
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+        run: |
+          mkdir -p android/app
+          echo "$KEYSTORE_BASE64" | base64 --decode > android/app/upload-keystore.jks
+          flutter build apk --release --split-per-abi
+
+      - name: Upload 32-bit APK (armeabi-v7a)
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apk-armeabi-v7a
+          path: build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+
+      - name: Upload 64-bit APK (arm64-v8a)
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apk-arm64-v8a
+          path: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          flutter-version: '3.35.4'  # تحديد الإصدار بدقة
+
+      - name: Flutter Clean
+        run: flutter clean
+
+      - name: Flutter Pub Get
+        run: flutter pub get
+
+      - name: Setup Visual Studio C++ Build Tools
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install VC++ Redistributable
+        run: |
+          Write-Host "📦 Installing Visual C++ Redistributable..."
+          Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile "vc_redist.x64.exe"
+          Start-Process -FilePath "./vc_redist.x64.exe" -ArgumentList "/install", "/quiet", "/norestart" -Wait
+          Write-Host "✅ VC++ Redistributable installed"
+        shell: powershell
+
+      - name: Build Windows Release
+        run: |
+          Write-Host "🔨 Building Windows release..."
+          flutter build windows --release --verbose
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "❌ Build failed with exit code $LASTEXITCODE"
+            exit $LASTEXITCODE
+          }
+          Write-Host "✅ Build completed successfully"
+        shell: powershell
+
+      # خطوة حاسمة: التحقق من وجود الملفات الأساسية
+      - name: Verify Critical Files
+        run: |
+          Write-Host "🔍 Verifying critical files..."
+          
+          # Find release directory
+          $releaseDir = $null
+          $searchPaths = @(
+            "build/windows/x64/runner/Release",
+            "build/windows/runner/Release",
+            "build/windows/x64/windows/runner/Release"
+          )
+          
+          foreach ($path in $searchPaths) {
+            if (Test-Path "$path/*.exe") {
+              $releaseDir = $path
+              break
+            }
+          }
+          
+          if (-not $releaseDir) {
+            Write-Host "❌ ERROR: Could not find release directory with .exe file"
+            exit 1
+          }
+          
+          Write-Host "✅ Found release directory: $releaseDir"
+          
+          # Check for executable
+          $exeFiles = Get-ChildItem -Path $releaseDir -Filter "*.exe"
+          if ($exeFiles.Count -eq 0) {
+            Write-Host "❌ ERROR: No .exe file found in release directory"
+            exit 1
+          }
+          Write-Host "✅ Found EXE: $($exeFiles[0].Name)"
+          
+          # Check for flutter_windows.dll
+          if (-not (Test-Path "$releaseDir/flutter_windows.dll")) {
+            Write-Host "❌ ERROR: flutter_windows.dll is missing!"
+            exit 1
+          }
+          Write-Host "✅ Found flutter_windows.dll"
+          
+          # Check for data folder
+          if (-not (Test-Path "$releaseDir/data")) {
+            Write-Host "❌ ERROR: data folder is missing!"
+            exit 1
+          }
+          Write-Host "✅ Found data folder"
+          
+          # Check for icudtl.dat
+          if (-not (Test-Path "$releaseDir/data/icudtl.dat")) {
+            Write-Host "❌ ERROR: data/icudtl.dat is missing!"
+            exit 1
+          }
+          Write-Host "✅ Found icudtl.dat"
+          
+          # Check for app.so (AOT compiled code)
+          if (-not (Test-Path "$releaseDir/data/app.so")) {
+            Write-Host "❌ ERROR: data/app.so is missing!"
+            exit 1
+          }
+          Write-Host "✅ Found app.so"
+          
+          # Check for flutter_assets
+          if (-not (Test-Path "$releaseDir/data/flutter_assets")) {
+            Write-Host "⚠️ WARNING: data/flutter_assets folder is missing!"
+          } else {
+            Write-Host "✅ Found flutter_assets"
+          }
+          
+          # List all files for debugging
+          Write-Host "`n📂 Complete file structure:"
+          Get-ChildItem -Path $releaseDir -Recurse | Select-Object FullName | Format-Table -AutoSize
+          
+        shell: powershell
+
+      # تحسين خطوة نسخ DLLs
+      - name: Collect Required DLLs (Enhanced)
+        run: |
+          Write-Host "📦 Collecting required DLLs..."
+          
+          # Find release directory
+          $releaseDir = $null
+          $searchPaths = @(
+            "build/windows/x64/runner/Release",
+            "build/windows/runner/Release",
+            "build/windows/x64/windows/runner/Release"
+          )
+          
+          foreach ($path in $searchPaths) {
+            if (Test-Path "$path/*.exe") {
+              $releaseDir = $path
+              break
+            }
+          }
+          
+          if (-not $releaseDir) {
+            Write-Host "❌ ERROR: Could not find release directory"
+            exit 1
+          }
+          
+          Write-Host "Found release directory: $releaseDir"
+          
+          # Copy VC++ Runtime DLLs
+          $vcDlls = @("msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll")
+          $missingDlls = @()
+          
+          foreach ($dll in $vcDlls) {
+            $dest = "$releaseDir\$dll"
+            if (-not (Test-Path $dest)) {
+              # Try multiple sources
+              $sources = @(
+                "C:\Windows\System32\$dll",
+                "C:\Windows\SysWOW64\$dll",
+                "$env:SystemRoot\System32\$dll"
+              )
+              
+              $copied = $false
+              foreach ($src in $sources) {
+                if (Test-Path $src) {
+                  Copy-Item $src $dest -Force -ErrorAction SilentlyContinue
+                  if (Test-Path $dest) {
+                    Write-Host "✅ Copied $dll from $src"
+                    $copied = $true
+                    break
+                  }
+                }
+              }
+              
+              if (-not $copied) {
+                Write-Host "⚠️ WARNING: Could not copy $dll"
+                $missingDlls += $dll
+              }
+            } else {
+              Write-Host "✅ $dll already exists"
+            }
+          }
+          
+          # Download missing DLLs from reliable source
+          if ($missingDlls.Count -gt 0) {
+            Write-Host "`n⚠️ Some DLLs are missing. Attempting to download..."
+            # Note: في بيئة إنتاج حقيقية، يجب استخدام مصدر موثوق للـ DLLs
+            Write-Host "Missing DLLs: $($missingDlls -join ', ')"
+          }
+          
+          # Verify all required DLLs exist
+          $allDllsPresent = $true
+          foreach ($dll in $vcDlls) {
+            if (-not (Test-Path "$releaseDir\$dll")) {
+              Write-Host "❌ CRITICAL: $dll is still missing!"
+              $allDllsPresent = $false
+            }
+          }
+          
+          if (-not $allDllsPresent) {
+            Write-Host "`n⚠️ WARNING: Some required DLLs are missing."
+            Write-Host "The application may require VC++ Redistributable to be installed on target machine."
+          }
+          
+        shell: powershell
+
+      # إنشاء ملف README مع التعليمات
+      - name: Create README for Distribution
+        run: |
+          $releaseDir = $null
+          $searchPaths = @(
+            "build/windows/x64/runner/Release",
+            "build/windows/runner/Release",
+            "build/windows/x64/windows/runner/Release"
+          )
+          
+          foreach ($path in $searchPaths) {
+            if (Test-Path "$path/*.exe") {
+              $releaseDir = $path
+              break
+            }
+          }
+          
+          $readmeContent = @"
+# تطبيق Maher - Windows Release
+
+## متطلبات التشغيل:
+1. Windows 10 أو أحدث (64-bit)
+2. Visual C++ Redistributable 2015-2022 (x64)
+   - تحميل من: https://aka.ms/vs/17/release/vc_redist.x64.exe
+
+## طريقة التشغيل:
+1. استخرج جميع الملفات من ملف ZIP
+2. تأكد من وجود المجلدات التالية:
+   - data/
+   - data/flutter_assets/
+3. شغل ملف maher.exe
+
+## في حال ظهور خطأ:
+- تأكد من تثبيت Visual C++ Redistributable
+- تأكد من عدم نقل ملف .exe بدون المجلدات المرافقة
+- تأكد من وجود صلاحيات التشغيل
+
+## الملفات المطلوبة:
+✅ maher.exe (التطبيق الرئيسي)
+✅ flutter_windows.dll (مكتبة Flutter الأساسية)
+✅ data/icudtl.dat (بيانات Unicode)
+✅ data/app.so (كود التطبيق المترجم)
+✅ data/flutter_assets/ (موارد التطبيق)
+
+## للدعم:
+في حال واجهت أي مشكلة، تواصل مع المطور
+"@
+          
+          Set-Content -Path "$releaseDir\README.txt" -Value $readmeContent -Encoding UTF8
+          Write-Host "✅ Created README.txt"
+          
+        shell: powershell
+
+      # إنشاء installer script اختياري
+      - name: Create Installer Script
+        run: |
+          $releaseDir = $null
+          $searchPaths = @(
+            "build/windows/x64/runner/Release",
+            "build/windows/runner/Release",
+            "build/windows/x64/windows/runner/Release"
+          )
+          
+          foreach ($path in $searchPaths) {
+            if (Test-Path "$path/*.exe") {
+              $releaseDir = $path
+              break
+            }
+          }
+          
+          $installerScript = @"
+@echo off
+echo ====================================
+echo Maher Application - First Run Setup
+echo ====================================
+echo.
+
+REM Check for VC++ Redistributable
+echo Checking for Visual C++ Redistributable...
+reg query "HKLM\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64" /v Version >nul 2>&1
+if errorlevel 1 (
+    echo [WARNING] Visual C++ Redistributable not found!
+    echo Please install from: https://aka.ms/vs/17/release/vc_redist.x64.exe
+    echo.
+    pause
+)
+
+REM Check critical files
+echo Checking critical files...
+if not exist "data\icudtl.dat" (
+    echo [ERROR] Missing file: data\icudtl.dat
+    echo Please extract all files from the ZIP archive!
+    pause
+    exit /b 1
+)
+
+if not exist "data\app.so" (
+    echo [ERROR] Missing file: data\app.so
+    echo Please extract all files from the ZIP archive!
+    pause
+    exit /b 1
+)
+
+if not exist "flutter_windows.dll" (
+    echo [ERROR] Missing file: flutter_windows.dll
+    echo Please extract all files from the ZIP archive!
+    pause
+    exit /b 1
+)
+
+echo [OK] All critical files found!
+echo.
+echo Starting application...
+echo.
+start maher.exe
+
+timeout /t 2 >nul
+exit
+"@
+          
+          Set-Content -Path "$releaseDir\run.bat" -Value $installerScript -Encoding ASCII
+          Write-Host "✅ Created run.bat launcher"
+          
+        shell: powershell
+
+      # تحسين خطوة التعبئة
+      - name: Package as ZIP (Enhanced)
+        run: |
+          Write-Host "📦 Creating distributable package..."
+          
+          $releaseDir = $null
+          $searchPaths = @(
+            "build/windows/x64/runner/Release",
+            "build/windows/runner/Release",
+            "build/windows/x64/windows/runner/Release"
+          )
+          
+          foreach ($path in $searchPaths) {
+            if (Test-Path "$path/*.exe") {
+              $releaseDir = $path
+              break
+            }
+          }
+          
+          if (-not $releaseDir) {
+            Write-Host "❌ ERROR: Could not find release directory for packaging"
+            exit 1
+          }
+          
+          Write-Host "Packaging from: $releaseDir"
+          
+          # Create distribution folder
+          $distFolder = "maher-windows-distribution"
+          if (Test-Path $distFolder) {
+            Remove-Item -Recurse -Force $distFolder
+          }
+          New-Item -ItemType Directory -Path $distFolder | Out-Null
+          
+          # Copy all files
+          Copy-Item -Path "$releaseDir\*" -Destination $distFolder -Recurse -Force
+          
+          # List contents for verification
+          Write-Host "`n📂 Package contents:"
+          Get-ChildItem -Path $distFolder -Recurse | Select-Object FullName | Format-Table -AutoSize
+          
+          # Create ZIP
+          $zipPath = "maher-windows-x64-release.zip"
+          if (Test-Path $zipPath) {
+            Remove-Item $zipPath -Force
+          }
+          
+          Compress-Archive -Path "$distFolder\*" -DestinationPath $zipPath -CompressionLevel Optimal -Force
+          
+          if (Test-Path $zipPath) {
+            $zipSize = (Get-Item $zipPath).Length / 1MB
+            Write-Host "✅ Created ZIP package: $zipPath (Size: $([math]::Round($zipSize, 2)) MB)"
+          } else {
+            Write-Host "❌ ERROR: Failed to create ZIP package"
+            exit 1
+          }
+          
+          # Cleanup
+          Remove-Item -Recurse -Force $distFolder
+          
+        shell: powershell
+
+      # تحميل النسخة النهائية
+      - name: Upload Windows Release Package
+        uses: actions/upload-artifact@v4
+        with:
+          name: maher-windows-x64-release
+          path: maher-windows-x64-release.zip
+          retention-days: 90
+
+      # إنشاء checksum للتحقق من سلامة الملف
+      - name: Generate Checksum
+        run: |
+          $zipFile = "maher-windows-x64-release.zip"
+          if (Test-Path $zipFile) {
+            $hash = Get-FileHash -Path $zipFile -Algorithm SHA256
+            $checksumContent = "SHA256: $($hash.Hash)`nFile: $zipFile`nSize: $((Get-Item $zipFile).Length) bytes"
+            Set-Content -Path "checksum.txt" -Value $checksumContent
+            Write-Host "✅ Generated checksum"
+            Write-Host $checksumContent
+          }
+        shell: powershell
+
+      - name: Upload Checksum
+        uses: actions/upload-artifact@v4
+        with:
+          name: maher-checksum
+          path: checksum.txt
