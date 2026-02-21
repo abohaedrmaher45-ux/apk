@@ -26,6 +26,9 @@ jobs:
         with:
           flutter-version: '3.35.1' # يمكنك تحديث هذا الإصدار إذا لزم الأمر
 
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        
       - name: Flutter Clean
         run: flutter clean
 
