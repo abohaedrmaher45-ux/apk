@@ -23,10 +23,15 @@ jobs:
       - name: Install Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.29.2'   # 👈 التغيير الوحيد
+          flutter-version: '3.29.2'
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+
+      - name: Upgrade Flutter Project
+        run: |
+          flutter upgrade
+          flutter create --android-language kotlin --platforms=android .
 
       - name: Flutter Clean
         run: flutter clean
@@ -36,12 +41,15 @@ jobs:
 
       - name: Build All APKs
         run: |
+          # تهيئة ملف Keystore
           mkdir -p android/app
           echo $KEYSTORE_BASE64 | base64 --decode > android/app/upload-keystore.jks
           
+          # بناء APK مقسم
           echo "Building split-per-abi APKs..."
           flutter build apk --release --split-per-abi
           
+          # بناء APK معتم
           echo "Building obfuscated APK..."
           flutter build apk --release --obfuscate --split-debug-info=build/symbols
 
