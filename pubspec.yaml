@@ -6,74 +6,58 @@ publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.0.0 <4.0.0'  # تم رفع الحد الأدنى لضمان التوافق
+  sdk: '>=3.0.0 <4.0.0'
 
 dependencies:
   flutter:
     sdk: flutter
-  flutter_secure_storage: ^9.0.0
-  ntp: ^2.0.0
-  path_provider: ^2.1.1
-  permission_handler: ^11.0.1
-  device_info_plus: ^10.1.0
-  crypto: ^3.0.3
-  intl: ^0.18.1
-  shared_preferences: ^2.2.2
-  # تحديث ntp إلى أحدث إصدار
-
   
-  # تحديث permission_handler
+  # ✅ مكتبات الأمان والحماية (مرة واحدة فقط)
+  flutter_secure_storage: ^10.0.0
+  ntp: ^2.0.0
+  path_provider: ^2.1.5
   permission_handler: ^11.3.1
-
-  # أيقونات
+  device_info_plus: ^11.3.0
+  crypto: ^3.0.6
+  
+  # ✅ أيقونات
   cupertino_icons: ^1.0.8
   
-  # Database - ممتاز، محدث
-  sqflite: ^2.4.2  # تحديث بسيط
-  path: ^1.9.1     # تحديث بسيط
+  # ✅ Database
+  sqflite: ^2.4.2
+  path: ^1.9.1
   
-  # State Management - إصلاح المشكلة الرئيسية
-  provider: 6.1.2  # تم تغييرها من 6.1.5+1 إلى 6.1.2 (الإصدار المستقر)
+  # ✅ State Management
+  provider: 6.1.2
   
-  # PDF Generation
-  pdf: ^3.11.2     # تحديث
-  share_plus: ^10.1.1  # تحديث كبير (من 7.1.0)
+  # ✅ PDF Generation
+  pdf: ^3.11.2
+  share_plus: ^10.1.1
   
-  # Date handling - ممتاز
-  intl: ^0.20.2    # تحديث
+  # ✅ Date handling
+  intl: ^0.20.2
   
-  # Local storage - تحديث مهم
-  path_provider: ^2.1.5  # لا تغيير، لكن تأكد من التوافق
-  shared_preferences: ^2.5.3  # لا تغيير، لكن تأكد من التوافق
-
-  # HTTP requests
-  http: ^1.3.0     # تحديث
-
-  # شعار التطبيق
-  flutter_launcher_icons: ^0.14.3  # تحديث مهم
-
-  # مكتبات الأمان والحماية - تحديثات مهمة
-  device_info_plus: ^11.3.0  # تحديث كبير (من 10.1.2)
-  crypto: ^3.0.6             # تحديث بسيط
-  flutter_secure_storage: ^10.0.0
+  # ✅ HTTP requests
+  http: ^1.3.0
+  
+  # ✅ شعار التطبيق
+  flutter_launcher_icons: ^0.14.3
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  flutter_lints: ^5.0.0
 
-  flutter_lints: ^5.0.0  # تحديث كبير
-  
 flutter:
   uses-material-design: true
   assets:
     - assets/fonts/Cairo-Regular.ttf
-    - assets/images/logo.png  # تأكد من وجود المسار الصحيح
+    - assets/images/logo.png
 
-# 👇 أيقونة التطبيق
+# 👇 أيقونة التطبيق (خارج قسم flutter)
 flutter_launcher_icons:
   android: true
-  ios: true  # أضف iOS إذا كنت تدعمه
+  ios: true
   image_path: "assets/images/logo.png"
   adaptive_icon_foreground: "assets/images/logo.png"
-  #adaptive_icon_background: "#FFFFFF"
-  min_sdk_android: 21  # إضافة حد أدنى للإصدار
+  min_sdk_android: 21
