@@ -1,0 +1,1 @@
+:  /home/user/flutter_app/web/index.html
