@@ -1,42 +1,51 @@
-- name: Set Android SDK path
-  run: |
-    echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
-    echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
-  name: Build APK
+name: Build APK
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:  # يسمح بتشغيل البناء يدوياً
 
-  on: [push, workflow_dispatch]
-
-  jobs:
+jobs:
   build:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Checkout code
+      - name: 📥 Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Java
+      - name: ☕ Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
 
-      - name: Setup Android SDK
+      - name: 🤖 Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Setup Flutter
+      - name: 🎯 Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.29.2'
           channel: 'stable'
           
-      - name: Install dependencies
-        run: flutter pub get
-        
-      - name: Build APK
+      - name: 📦 Install dependencies
+        run: |
+          flutter clean
+          flutter pub get
+          
+      - name: 🔍 Verify environment
+        run: |
+          flutter doctor -v
+          echo "✅ Flutter version: $(flutter --version)"
+          echo "✅ Android SDK: $ANDROID_HOME"
+          
+      - name: 🏗️ Build APK
         run: flutter build apk --release
         
-      - name: Upload APK
+      - name: 📤 Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: release-apk
           path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 30  # احتفظ بالملف لمدة 30 يوماً
