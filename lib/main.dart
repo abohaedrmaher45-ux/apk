@@ -107,18 +107,27 @@ class ActivationScreen extends StatelessWidget {
             ElevatedButton(
               onPressed: () async {
                 // التحقق باستخدام الخوارزمية المحلية
-                bool isValid = licenseService.validateId(_userController.text, _idController.text);
+                bool isValid = await licenseService.validateId(
+                  _userController.text, 
+                  _idController.text
+                );
                 
                 if (isValid) {
                   // حفظ التفعيل
-                  await licenseService.activateApp(_idController.text, _userController.text);
+                  await licenseService.activateApp(
+                    _idController.text, 
+                    _userController.text
+                  );
                   
                   // إعادة تحميل التطبيق (أو التنقل للشاشة الرئيسية)
-                  // الطريقة الأبسط هي إعادة تشغيل التطبيق أو استخدام state management
-                  // هنا سنستخدم Navigator لإزالة الشاشة الحالية والذهاب للرئيسية
-                  Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => MyApp()));
+                  Navigator.pushReplacement(
+                    context, 
+                    MaterialPageRoute(builder: (_) => MyApp())
+                  );
                 } else {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("معلومات التفعيل غير صحيحة")));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("معلومات التفعيل غير صحيحة"))
+                  );
                 }
               },
               child: Text("تفعيل الآن"),

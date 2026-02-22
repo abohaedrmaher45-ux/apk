@@ -11,7 +11,14 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-
+  flutter_secure_storage: ^9.0.0
+  ntp: ^2.0.0
+  path_provider: ^2.1.1
+  permission_handler: ^11.0.1
+  device_info_plus: ^10.1.0
+  crypto: ^3.0.3
+  intl: ^0.18.1
+  shared_preferences: ^2.2.2
   # تحديث ntp إلى أحدث إصدار
   ntp: ^2.0.0
   
@@ -48,6 +55,7 @@ dependencies:
   # مكتبات الأمان والحماية - تحديثات مهمة
   device_info_plus: ^11.3.0  # تحديث كبير (من 10.1.2)
   crypto: ^3.0.6             # تحديث بسيط
+  flutter_secure_storage: ^10.0.0
 
 dev_dependencies:
   flutter_test:
