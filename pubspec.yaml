@@ -20,7 +20,7 @@ dependencies:
   intl: ^0.18.1
   shared_preferences: ^2.2.2
   # تحديث ntp إلى أحدث إصدار
-  ntp: ^2.0.0
+
   
   # تحديث permission_handler
   permission_handler: ^11.3.1
