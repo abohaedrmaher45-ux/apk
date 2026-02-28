@@ -5,7 +5,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'screens/login_screen.dart';
 import 'security/activation_screen.dart';
-import 'services/app_state_manager.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,7 +17,7 @@ void main() async {
   runApp(MyApp());
 }
 
-// ✅ كلاس التحقق من الوقت (واتساب ستايل) - فقط هذا مضاف
+// ✅ التحقق من الوقت (واتساب ستايل)
 class _TimeValidator {
   static Future<bool> isTimeValid() async {
     final prefs = await SharedPreferences.getInstance();
@@ -30,9 +29,7 @@ class _TimeValidator {
       return true;
     }
     
-    if (now < lastTime || now > lastTime + 300) {
-      return false;
-    }
+    if (now < lastTime || now > lastTime + 300) return false;
     
     await prefs.setInt('last_valid_time', now);
     return true;
@@ -40,8 +37,6 @@ class _TimeValidator {
 }
 
 class MyApp extends StatelessWidget {
-  final AppStateManager _appStateManager = AppStateManager();
-
   MyApp({super.key});
 
   @override
@@ -62,93 +57,69 @@ class MyApp extends StatelessWidget {
           if (!await _TimeValidator.isTimeValid()) {
             throw Exception('Invalid time');
           }
-          return _getAppStatusWithTime();
+          return _getTrialStatus();
         }(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return _buildSplashScreen();
           }
 
-          if (snapshot.hasError) {
-            return _buildTimeErrorScreen();
-          }
-
-          Map<String, dynamic> data = snapshot.data ?? {
-            'status': 'expired',
-            'remainingSeconds': 0,
-          };
+          int remainingSeconds = snapshot.data?['remainingSeconds'] ?? 0;
           
-          String status = data['status'];
-          int remainingSeconds = data['remainingSeconds'];
-          
-          if (status == 'activated') {
-            return _TrialTimerWrapper(
-              remainingSeconds: remainingSeconds,
-              child: const LoginScreen(),
-            );
-          } else {
-            return _TrialTimerWrapper(
-              remainingSeconds: remainingSeconds,
-              child: const ActivationScreen(),
-            );
-          }
+          return _TrialTimerWrapper(
+            remainingSeconds: remainingSeconds,
+            child: FutureBuilder<bool>(
+              future: _checkActivationStatus(),
+              builder: (context, snap) {
+                if (snap.connectionState == ConnectionState.waiting) {
+                  return _buildSplashScreen();
+                }
+                bool isActivated = snap.data ?? false;
+                return isActivated ? const LoginScreen() : const ActivationScreen();
+              },
+            ),
+          );
         },
       ),
     );
   }
 
-  Future<Map<String, dynamic>> _getAppStatusWithTime() async {
+  Future<Map<String, dynamic>> _getTrialStatus() async {
     try {
-      String status = await _appStateManager.getAppStatus();
-      int remainingSeconds = 0;
+      final prefs = await SharedPreferences.getInstance();
+      bool isActivated = prefs.getBool('is_activated') ?? false;
       
-      if (status == 'trial') {
-        final storage = FlutterSecureStorage();
-        String? firstLaunchStr = await storage.read(key: 'first_launch_date');
-        
-        if (firstLaunchStr == null) {
-          String now = DateTime.now().toIso8601String();
-          await storage.write(key: 'first_launch_date', value: now);
-          remainingSeconds = 15 * 60;
-        } else {
-          DateTime firstLaunch = DateTime.parse(firstLaunchStr);
-          DateTime now = DateTime.now();
-          const trialSeconds = 15 * 60;
-          int elapsedSeconds = now.difference(firstLaunch).inSeconds;
-          remainingSeconds = trialSeconds - elapsedSeconds;
-          if (remainingSeconds < 0) remainingSeconds = 0;
-        }
+      if (isActivated) {
+        return {'remainingSeconds': 0};
       }
       
-      return {'status': status, 'remainingSeconds': remainingSeconds};
+      final storage = FlutterSecureStorage();
+      String? firstLaunchStr = await storage.read(key: 'first_launch_date');
+      
+      if (firstLaunchStr == null) {
+        String now = DateTime.now().toIso8601String();
+        await storage.write(key: 'first_launch_date', value: now);
+        return {'remainingSeconds': 15 * 60};
+      }
+      
+      DateTime firstLaunch = DateTime.parse(firstLaunchStr);
+      DateTime now = DateTime.now();
+      const trialSeconds = 15 * 60;
+      int remaining = trialSeconds - now.difference(firstLaunch).inSeconds;
+      
+      return {'remainingSeconds': remaining < 0 ? 0 : remaining};
     } catch (e) {
-      return {'status': 'error', 'remainingSeconds': 0};
+      return {'remainingSeconds': 0};
     }
   }
 
-  Widget _buildTimeErrorScreen() {
-    return Scaffold(
-      body: Container(
-        color: Colors.red.shade900,
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.access_time_filled, size: 100, color: Colors.white),
-              const SizedBox(height: 30),
-              const Text('الوقت غير صحيح', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white)),
-              const SizedBox(height: 20),
-              const Text('يرجى ضبط الوقت والتاريخ بشكل صحيح', style: TextStyle(fontSize: 18, color: Colors.white70)),
-              const SizedBox(height: 40),
-              ElevatedButton(
-                onPressed: () => SystemNavigator.pop(),
-                child: const Text('إغلاق', style: TextStyle(fontSize: 18)),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+  Future<bool> _checkActivationStatus() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getBool('is_activated') ?? false;
+    } catch (e) {
+      return false;
+    }
   }
 
   Widget _buildSplashScreen() {
@@ -166,8 +137,12 @@ class MyApp extends StatelessWidget {
               Icon(Icons.shopping_cart, size: 100, color: Colors.white),
               SizedBox(height: 20),
               Text('Al Hal Market', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white)),
+              SizedBox(height: 10),
+              Text('محاسب سوق الهال', style: TextStyle(fontSize: 18, color: Colors.white)),
               SizedBox(height: 30),
               CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
+              SizedBox(height: 20),
+              Text('جاري تحميل التطبيق...', style: TextStyle(color: Colors.white)),
             ],
           ),
         ),
@@ -176,7 +151,6 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// ✅ موقت التوقيت
 class _TrialTimerWrapper extends StatefulWidget {
   final Widget child;
   final int remainingSeconds;
