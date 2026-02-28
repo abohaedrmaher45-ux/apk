@@ -2,8 +2,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'screens/login_screen.dart';
 import 'security/activation_screen.dart';
+import 'services/app_state_manager.dart';
+import 'services/time_security_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,6 +20,8 @@ void main() async {
 }
 
 class MyApp extends StatelessWidget {
+  final AppStateManager _appStateManager = AppStateManager();
+
   MyApp({super.key});
 
   @override
@@ -32,46 +37,103 @@ class MyApp extends StatelessWidget {
         useMaterial3: true,
         fontFamily: 'Arial',
       ),
-      home: FutureBuilder<bool>(
-        future: _checkActivationStatus(),
+      home: FutureBuilder<Map<String, dynamic>>(
+        future: _getAppStatusWithTime(),
         builder: (context, snapshot) {
-          // حالة الانتظار - تظهر شاشة التحميل
           if (snapshot.connectionState == ConnectionState.waiting) {
             return _buildSplashScreen();
           }
 
-          // في حالة الخطأ، نعرض شاشة الدخول كحل آمن
           if (snapshot.hasError) {
             return const _TrialTimerWrapper(child: LoginScreen());
           }
 
-          // إذا كان مفعلاً، نعرض شاشة الدخول، وإلا نعرض شاشة التفعيل
-          bool isActivated = snapshot.data ?? false;
+          Map<String, dynamic> data = snapshot.data ?? {
+            'status': 'expired',
+            'remainingSeconds': 0,
+          };
           
-          if (isActivated) {
-            return const _TrialTimerWrapper(child: LoginScreen());
+          String status = data['status'];
+          int remainingSeconds = data['remainingSeconds'];
+          
+          // ✅ التعديل الوحيد: تغليف MaterialApp بالكامل
+          if (status == 'activated') {
+            return _TrialTimerWrapper(
+              remainingSeconds: remainingSeconds,
+              child: MaterialApp(
+                title: 'Al Hal Market',
+                debugShowCheckedModeBanner: false,
+                theme: ThemeData(
+                  colorScheme: ColorScheme.fromSeed(
+                    seedColor: Colors.teal,
+                    brightness: Brightness.light,
+                  ),
+                  useMaterial3: true,
+                  fontFamily: 'Arial',
+                ),
+                home: const LoginScreen(),
+              ),
+            );
           } else {
-            return const _TrialTimerWrapper(child: ActivationScreen());
+            return _TrialTimerWrapper(
+              remainingSeconds: remainingSeconds,
+              child: MaterialApp(
+                title: 'Al Hal Market',
+                debugShowCheckedModeBanner: false,
+                theme: ThemeData(
+                  colorScheme: ColorScheme.fromSeed(
+                    seedColor: Colors.teal,
+                    brightness: Brightness.light,
+                  ),
+                  useMaterial3: true,
+                  fontFamily: 'Arial',
+                ),
+                home: const ActivationScreen(),
+              ),
+            );
           }
         },
       ),
     );
   }
 
-  // ✅ التحقق من حالة التفعيل محلياً فقط (بدون إنترنت)
-  Future<bool> _checkActivationStatus() async {
+  Future<Map<String, dynamic>> _getAppStatusWithTime() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      // قراءة حالة التفعيل من الذاكرة المحلية فقط
-      bool isActivated = prefs.getBool('is_activated') ?? false;
-      return isActivated;
+      String status = await _appStateManager.getAppStatus();
+      
+      int remainingSeconds = 0;
+      
+      if (status == 'trial') {
+        final storage = FlutterSecureStorage();
+        String? firstLaunchStr = await storage.read(key: 'first_launch_date_secure');
+        
+        if (firstLaunchStr != null) {
+          DateTime firstLaunch = DateTime.parse(firstLaunchStr);
+          final timeService = TimeSecurityService();
+          DateTime? secureTime = await timeService.getSecureTime();
+          
+          if (secureTime != null) {
+            const trialMinutes = 15;
+            const trialSeconds = trialMinutes * 60;
+            int elapsedSeconds = secureTime.difference(firstLaunch).inSeconds;
+            remainingSeconds = trialSeconds - elapsedSeconds;
+            if (remainingSeconds < 0) remainingSeconds = 0;
+          }
+        }
+      }
+      
+      return {
+        'status': status,
+        'remainingSeconds': remainingSeconds,
+      };
     } catch (e) {
-      // في حالة أي خطأ، نعيد false كقيمة افتراضية آمنة
-      return false;
+      return {
+        'status': 'error',
+        'remainingSeconds': 0,
+      };
     }
   }
 
-  // ✅ شاشة البداية (Splash Screen)
   Widget _buildSplashScreen() {
     return Scaffold(
       body: Container(
@@ -103,31 +165,56 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// ✅ موقت التوقيت - يضاف في نهاية الملف
+// ✅ موقت التوقيت - بدون تغيير
 class _TrialTimerWrapper extends StatefulWidget {
   final Widget child;
-  const _TrialTimerWrapper({required this.child});
+  final int remainingSeconds;
+
+  const _TrialTimerWrapper({
+    required this.child,
+    this.remainingSeconds = 0,
+  });
 
   @override
   __TrialTimerWrapperState createState() => __TrialTimerWrapperState();
 }
 
 class __TrialTimerWrapperState extends State<_TrialTimerWrapper> {
-  int _counter = 900; // 15 دقيقة × 60 ثانية
+  late int _remainingSeconds;
   Timer? _timer;
 
   @override
   void initState() {
     super.initState();
-    _startTimer();
+    _remainingSeconds = widget.remainingSeconds;
+    
+    if (_remainingSeconds > 0) {
+      _startTimer();
+    }
   }
 
   void _startTimer() {
+    _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_counter > 0) {
-        setState(() => _counter--);
+      if (_remainingSeconds > 0) {
+        setState(() {
+          _remainingSeconds--;
+        });
+      } else {
+        _timer?.cancel();
       }
     });
+  }
+
+  @override
+  void didUpdateWidget(_TrialTimerWrapper oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.remainingSeconds != oldWidget.remainingSeconds) {
+      _remainingSeconds = widget.remainingSeconds;
+      if (_remainingSeconds > 0) {
+        _startTimer();
+      }
+    }
   }
 
   @override
@@ -137,37 +224,59 @@ class __TrialTimerWrapperState extends State<_TrialTimerWrapper> {
   }
 
   String _formatTime(int seconds) {
-    int minutes = seconds ~/ 60;
+    int hours = seconds ~/ 3600;
+    int minutes = (seconds % 3600) ~/ 60;
     int secs = seconds % 60;
-    return '${minutes.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
+    
+    if (hours > 0) {
+      return '$hours:${minutes.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
+    } else {
+      return '${minutes.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_remainingSeconds <= 0) {
+      return widget.child;
+    }
+
     return Stack(
       children: [
-        widget.child,
-        if (_counter > 0)
-          Positioned(
-            top: 40,
-            right: 16,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: _counter < 300 ? Colors.red : Colors.orange,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.timer, color: Colors.white, size: 18),
-                  const SizedBox(width: 8),
-                  Text(_formatTime(_counter), 
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                ],
-              ),
+        widget.child, // MaterialApp بأكمله
+        Positioned(
+          top: 40,
+          right: 16,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: _remainingSeconds < 300 ? Colors.red : Colors.orange,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black26,
+                  blurRadius: 4,
+                  offset: Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.timer, color: Colors.white, size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  _formatTime(_remainingSeconds),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ],
             ),
           ),
+        ),
       ],
     );
   }
