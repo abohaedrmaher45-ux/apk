@@ -195,31 +195,42 @@ class __TrialTimerWrapperState extends State<_TrialTimerWrapper> {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        widget.child,
-        if (_remainingSeconds > 0)
-          Positioned(
-            top: 40,
-            right: 16,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: _remainingSeconds < 300 ? Colors.red : Colors.orange,
-                borderRadius: BorderRadius.circular(20),
+    return FutureBuilder<bool>(
+      future: _checkActivationStatus(),
+      builder: (context, snapshot) {
+        bool isActivated = snapshot.data ?? false;
+        return Stack(
+          children: [
+            widget.child,
+            if (_remainingSeconds > 0 && !isActivated)
+              Positioned(
+                top: 40,
+                right: 16,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.timer, color: Colors.black54, size: 18),
+                      const SizedBox(width: 8),
+                      Text(_formatTime(_remainingSeconds), 
+                        style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.timer, color: Colors.white, size: 18),
-                  const SizedBox(width: 8),
-                  Text(_formatTime(_remainingSeconds), 
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                ],
-              ),
-            ),
-          ),
-      ],
+          ],
+        );
+      },
     );
+  }
+
+  Future<bool> _checkActivationStatus() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getBool('is_activated') ?? false;
+    } catch (e) {
+      return false;
+    }
   }
 }
