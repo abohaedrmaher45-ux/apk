@@ -90,7 +90,7 @@ class MyApp extends StatelessWidget {
       bool isActivated = prefs.getBool('is_activated') ?? false;
       
       if (isActivated) {
-        return {'remainingSeconds': 0};
+        return {'remainingSeconds': 15 * 60}; // ✅ بعد التفعيل يبدأ المؤقت من 15 دقيقة
       }
       
       final storage = FlutterSecureStorage();
@@ -177,26 +177,32 @@ class __TrialTimerWrapperState extends State<_TrialTimerWrapper> {
         setState(() => _remainingSeconds--);
       } else {
         _timer?.cancel();
-        _redirectToActivationScreen();
+        _handleTrialExpired();
       }
     });
   }
 
-  void _redirectToActivationScreen() async {
-    // التأكد من أن المستخدم ليس مفعلاً بالفعل
-    final prefs = await SharedPreferences.getInstance();
-    bool isActivated = prefs.getBool('is_activated') ?? false;
+  void _handleTrialExpired() async {
+    if (!mounted) return;
     
-    if (!isActivated && mounted) {
+    // حذف حالة التفعيل
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('is_activated', false);
+    
+    // حذف تاريخ أول تشغيل ليبدأ المؤقت من جديد
+    const storage = FlutterSecureStorage();
+    await storage.delete(key: 'first_launch_date');
+    
+    if (mounted) {
       // إظهار رسالة للمستخدم
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('انتهت الفترة التجريبية. يرجى تفعيل التطبيق للمتابعة.'),
+          content: Text('انتهت الفترة التجريبية. يرجى إدخال رابط التفعيل مرة أخرى.'),
           duration: Duration(seconds: 3),
         ),
       );
       
-      // إعادة التوجيه إلى شاشة التفعيل
+      // العودة إلى شاشة التفعيل
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const ActivationScreen()),
       );
@@ -252,8 +258,7 @@ class __TrialTimerWrapperState extends State<_TrialTimerWrapper> {
     try {
       final prefs = await SharedPreferences.getInstance();
       bool isActivated = prefs.getBool('is_activated') ?? false;
-      // إذا لم يتم التفعيل بعد، فهذا يعني أن الشاشة الحالية هي شاشة التفعيل
-      return !isActivated;
+      return !isActivated; // true إذا كانت الشاشة الحالية هي شاشة التفعيل
     } catch (e) {
       return false;
     }
