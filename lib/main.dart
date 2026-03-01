@@ -177,8 +177,30 @@ class __TrialTimerWrapperState extends State<_TrialTimerWrapper> {
         setState(() => _remainingSeconds--);
       } else {
         _timer?.cancel();
+        _redirectToActivationScreen();
       }
     });
+  }
+
+  void _redirectToActivationScreen() async {
+    // التأكد من أن المستخدم ليس مفعلاً بالفعل
+    final prefs = await SharedPreferences.getInstance();
+    bool isActivated = prefs.getBool('is_activated') ?? false;
+    
+    if (!isActivated && mounted) {
+      // إظهار رسالة للمستخدم
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('انتهت الفترة التجريبية. يرجى تفعيل التطبيق للمتابعة.'),
+          duration: Duration(seconds: 3),
+        ),
+      );
+      
+      // إعادة التوجيه إلى شاشة التفعيل
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const ActivationScreen()),
+      );
+    }
   }
 
   @override
