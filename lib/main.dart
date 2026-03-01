@@ -196,13 +196,14 @@ class __TrialTimerWrapperState extends State<_TrialTimerWrapper> {
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<bool>(
-      future: _checkActivationStatus(),
+      future: _checkIfActivationScreen(),
       builder: (context, snapshot) {
-        bool isActivated = snapshot.data ?? false;
+        bool isActivationScreen = snapshot.data ?? false;
+        
         return Stack(
           children: [
             widget.child,
-            if (_remainingSeconds > 0 && !isActivated)
+            if (_remainingSeconds > 0 && !isActivationScreen)
               Positioned(
                 top: 40,
                 right: 16,
@@ -225,10 +226,12 @@ class __TrialTimerWrapperState extends State<_TrialTimerWrapper> {
     );
   }
 
-  Future<bool> _checkActivationStatus() async {
+  Future<bool> _checkIfActivationScreen() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      return prefs.getBool('is_activated') ?? false;
+      bool isActivated = prefs.getBool('is_activated') ?? false;
+      // إذا لم يتم التفعيل بعد، فهذا يعني أن الشاشة الحالية هي شاشة التفعيل
+      return !isActivated;
     } catch (e) {
       return false;
     }
