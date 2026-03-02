@@ -159,22 +159,12 @@ class _TrialTimerWrapper extends StatefulWidget {
 class __TrialTimerWrapperState extends State<_TrialTimerWrapper> {
   late int _remainingSeconds;
   Timer? _timer;
-  bool _isActivationScreen = false;
 
   @override
   void initState() {
     super.initState();
     _remainingSeconds = widget.remainingSeconds;
-    _checkCurrentScreen();
     if (_remainingSeconds > 0) _startTimer();
-  }
-
-  void _checkCurrentScreen() async {
-    final prefs = await SharedPreferences.getInstance();
-    bool isActivated = prefs.getBool('is_activated') ?? false;
-    setState(() {
-      _isActivationScreen = !isActivated;
-    });
   }
 
   void _startTimer() {
@@ -183,19 +173,19 @@ class __TrialTimerWrapperState extends State<_TrialTimerWrapper> {
         setState(() => _remainingSeconds--);
       } else {
         _timer?.cancel();
-        _handleTrialExpired();
+        _redirectToActivationScreen();
       }
     });
   }
 
-  void _handleTrialExpired() async {
+  void _redirectToActivationScreen() async {
     if (!mounted) return;
-    
+
     // حذف حالة التفعيل
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('is_activated', false);
     
-    // حذف تاريخ أول تشغيل ليبدأ المؤقت من جديد عند إعادة التفعيل
+    // حذف تاريخ أول تشغيل ليبدأ المؤقت من جديد
     const storage = FlutterSecureStorage();
     await storage.delete(key: 'first_launch_date');
     
@@ -229,27 +219,48 @@ class __TrialTimerWrapperState extends State<_TrialTimerWrapper> {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        widget.child,
-        if (_remainingSeconds > 0 && !_isActivationScreen)
-          Positioned(
-            top: 40,
-            right: 16,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.timer, color: Colors.black54, size: 18),
-                  const SizedBox(width: 8),
-                  Text(_formatTime(_remainingSeconds), 
-                    style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.bold)),
-                ],
+    return FutureBuilder<bool>(
+      future: _checkIfActivationScreen(),
+      builder: (context, snapshot) {
+        bool isActivationScreen = snapshot.data ?? false;
+        
+        return Stack(
+          children: [
+            widget.child,
+            // إظهار المؤقت فقط إذا:
+            // 1. هناك وقت متبقي (_remainingSeconds > 0)
+            // 2. الشاشة الحالية ليست شاشة التفعيل (!isActivationScreen)
+            if (_remainingSeconds > 0 && !isActivationScreen)
+              Positioned(
+                top: 40,
+                right: 16,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.timer, color: Colors.black54, size: 18),
+                      const SizedBox(width: 8),
+                      Text(_formatTime(_remainingSeconds), 
+                        style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
               ),
-            ),
-          ),
-      ],
+          ],
+        );
+      },
     );
+  }
+
+  Future<bool> _checkIfActivationScreen() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      bool isActivated = prefs.getBool('is_activated') ?? false;
+      // إذا كان غير مفعل، فهذا يعني أن الشاشة الحالية هي شاشة التفعيل
+      return !isActivated;
+    } catch (e) {
+      return false;
+    }
   }
 }
