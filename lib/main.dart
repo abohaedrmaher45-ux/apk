@@ -1,17 +1,14 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'screens/login_screen.dart';
-import 'security/activation_screen.dart'; // استيراد شاشة التفعيل
+import 'security/activation_screen.dart';
 
 void main() async {
-  // التأكد من تهيئة Flutter
   WidgetsFlutterBinding.ensureInitialized();
 
-  // قفل اتجاه التطبيق
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.landscapeLeft,
     DeviceOrientation.landscapeRight,
@@ -126,30 +123,6 @@ class _TrialTimerState extends State<TrialTimer> {
   }
 }
 
-// ✅ مزود المؤقت للتطبيق كله
-class TrialTimerProvider extends InheritedWidget {
-  final int remainingSeconds;
-  final VoidCallback onTimerExpired;
-  final Timer? timer;
-
-  const TrialTimerProvider({
-    Key? key,
-    required this.remainingSeconds,
-    required this.onTimerExpired,
-    required this.timer,
-    required Widget child,
-  }) : super(key: key, child: child);
-
-  @override
-  bool updateShouldNotify(TrialTimerProvider oldWidget) {
-    return remainingSeconds != oldWidget.remainingSeconds;
-  }
-
-  static TrialTimerProvider? of(BuildContext context) {
-    return context.dependOnInheritedWidgetOfExactType<TrialTimerProvider>();
-  }
-}
-
 class MyApp extends StatelessWidget {
   MyApp({super.key});
 
@@ -168,28 +141,6 @@ class MyApp extends StatelessWidget {
       ),
       home: FutureBuilder<Map<String, dynamic>>(
         future: () async {
-          // التحقق من حالة التفعيل المخزنة
-          final prefs = await SharedPreferences.getInstance();
-          final String activationStatus = prefs.getString('activation_status') ?? '';
-
-          bool isActivated = false;
-          if (activationStatus.isNotEmpty) {
-            try {
-              // فك التشفير البسيط والتحقق من القيمة
-              final decodedStatus = utf8.decode(base64.decode(activationStatus));
-              if (decodedStatus == 'activated_ok') {
-                isActivated = true;
-              }
-            } catch (e) {
-              // في حال وجود قيمة خاطئة أو قديمة
-              isActivated = false;
-            }
-          }
-
-          if (!isActivated) {
-            return {'isActivated': false, 'remainingSeconds': 0};
-          }
-
           if (!await _TimeValidator.isTimeValid()) {
             throw Exception('Invalid time');
           }
@@ -200,14 +151,26 @@ class MyApp extends StatelessWidget {
             return _buildSplashScreen();
           }
 
-          bool isActivated = snapshot.data?['isActivated'] ?? false;
           int remainingSeconds = snapshot.data?['remainingSeconds'] ?? 0;
           
           return _TrialTimerWrapper(
             remainingSeconds: remainingSeconds,
-            child: isActivated 
-                ? _buildMainScreenWithTimer(remainingSeconds)
-                : const ActivationScreen(),
+            child: FutureBuilder<bool>(
+              future: _checkActivationStatus(),
+              builder: (context, snap) {
+                if (snap.connectionState == ConnectionState.waiting) {
+                  return _buildSplashScreen();
+                }
+                bool isActivated = snap.data ?? false;
+                
+                // تحديد الصفحة الرئيسية بناءً على حالة التفعيل
+                if (isActivated) {
+                  return _buildMainScreenWithTimer(remainingSeconds);
+                } else {
+                  return const ActivationScreen();
+                }
+              },
+            ),
           );
         },
       ),
@@ -217,7 +180,7 @@ class MyApp extends StatelessWidget {
   Widget _buildMainScreenWithTimer(int remainingSeconds) {
     return WillPopScope(
       onWillPop: () async => false, // منع الرجوع للخلف
-      child: TrialTimerStatefulProvider(
+      child: TrialTimerProvider(
         remainingSeconds: remainingSeconds,
         onTimerExpired: _handleTimerExpired,
         child: const LoginScreen(),
@@ -228,7 +191,7 @@ class MyApp extends StatelessWidget {
   void _handleTimerExpired() async {
     // حذف حالة التفعيل
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('activation_status');
+    await prefs.setBool('is_activated', false);
     
     // حذف تاريخ أول تشغيل ليبدأ المؤقت من جديد
     const storage = FlutterSecureStorage();
@@ -237,13 +200,16 @@ class MyApp extends StatelessWidget {
 
   Future<Map<String, dynamic>> _getTrialStatus() async {
     try {
+      final prefs = await SharedPreferences.getInstance();
+      bool isActivated = prefs.getBool('is_activated') ?? false;
+      
       final storage = FlutterSecureStorage();
       String? firstLaunchStr = await storage.read(key: 'first_launch_date');
       
       if (firstLaunchStr == null) {
         String now = DateTime.now().toIso8601String();
         await storage.write(key: 'first_launch_date', value: now);
-        return {'isActivated': true, 'remainingSeconds': 15 * 60};
+        return {'remainingSeconds': 15 * 60};
       }
       
       DateTime firstLaunch = DateTime.parse(firstLaunchStr);
@@ -251,9 +217,18 @@ class MyApp extends StatelessWidget {
       const trialSeconds = 15 * 60;
       int remaining = trialSeconds - now.difference(firstLaunch).inSeconds;
       
-      return {'isActivated': true, 'remainingSeconds': remaining < 0 ? 0 : remaining};
+      return {'remainingSeconds': remaining < 0 ? 0 : remaining};
     } catch (e) {
-      return {'isActivated': true, 'remainingSeconds': 0};
+      return {'remainingSeconds': 0};
+    }
+  }
+
+  Future<bool> _checkActivationStatus() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getBool('is_activated') ?? false;
+    } catch (e) {
+      return false;
     }
   }
 
@@ -286,13 +261,13 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// ✅ Stateful provider لإدارة المؤقت
-class TrialTimerStatefulProvider extends StatefulWidget {
+// ✅ مزود المؤقت للتطبيق كله
+class TrialTimerProvider extends StatefulWidget {
   final Widget child;
   final int remainingSeconds;
   final VoidCallback onTimerExpired;
 
-  const TrialTimerStatefulProvider({
+  const TrialTimerProvider({
     Key? key,
     required this.child,
     required this.remainingSeconds,
@@ -300,10 +275,14 @@ class TrialTimerStatefulProvider extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  _TrialTimerStatefulProviderState createState() => _TrialTimerStatefulProviderState();
+  _TrialTimerProviderState createState() => _TrialTimerProviderState();
+
+  static _TrialTimerProviderState? of(BuildContext context) {
+    return context.findAncestorStateOfType<_TrialTimerProviderState>();
+  }
 }
 
-class _TrialTimerStatefulProviderState extends State<TrialTimerStatefulProvider> {
+class _TrialTimerProviderState extends State<TrialTimerProvider> {
   late int _remainingSeconds;
   Timer? _timer;
 
@@ -332,6 +311,7 @@ class _TrialTimerStatefulProviderState extends State<TrialTimerStatefulProvider>
   Future<void> _redirectToActivationScreen() async {
     if (!mounted) return;
 
+    // إظهار رسالة للمستخدم
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('انتهت الفترة التجريبية. يرجى إدخال رابط التفعيل مرة أخرى.'),
@@ -339,6 +319,7 @@ class _TrialTimerStatefulProviderState extends State<TrialTimerStatefulProvider>
       ),
     );
 
+    // العودة إلى شاشة التفعيل
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const ActivationScreen()),
       (route) => false,
@@ -351,18 +332,17 @@ class _TrialTimerStatefulProviderState extends State<TrialTimerStatefulProvider>
     super.dispose();
   }
 
+  // دالة للوصول إلى الوقت المتبقي من أي مكان
+  int get remainingSeconds => _remainingSeconds;
+
   @override
   Widget build(BuildContext context) {
-    return TrialTimerProvider(
-      remainingSeconds: _remainingSeconds,
-      onTimerExpired: widget.onTimerExpired,
-      timer: _timer,
-      child: widget.child,
-    );
+    // تمت إزالة Stack نهائياً من هنا - المؤقت لن يظهر تلقائياً في أي شاشة
+    return widget.child;
   }
 }
 
-// ✅ Wrapper
+// ✅ Wrapper محدث مع دعم التنقل
 class _TrialTimerWrapper extends StatelessWidget {
   final Widget child;
   final int remainingSeconds;
