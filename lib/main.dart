@@ -17,14 +17,13 @@ void main() async {
   runApp(MyApp());
 }
 
-// ✅ مدير التفعيل - مسؤول عن حفظ واسترجاع رابط التفعيل
+// ✅ مدير التفعيل - كلاس Singleton
 class ActivationManager {
   static final ActivationManager _instance = ActivationManager._internal();
   factory ActivationManager() => _instance;
   ActivationManager._internal();
 
   final FlutterSecureStorage secureStorage = const FlutterSecureStorage();
-  final SharedPreferencesAsync asyncPrefs = SharedPreferencesAsync();
   
   static const String _activationLinkKey = 'activation_link';
   static const String _isActivatedKey = 'is_activated';
@@ -39,12 +38,6 @@ class ActivationManager {
   // ✅ استرجاع رابط التفعيل
   Future<String?> getActivationLink() async {
     return await secureStorage.read(key: _activationLinkKey);
-  }
-
-  // ✅ التحقق من وجود رابط مفعل
-  Future<bool> hasValidActivationLink() async {
-    final link = await getActivationLink();
-    return link != null && link.isNotEmpty;
   }
 
   // ✅ حفظ حالة التفعيل
@@ -228,23 +221,18 @@ class MyApp extends StatelessWidget {
           return _TrialTimerWrapper(
             remainingSeconds: remainingSeconds,
             child: FutureBuilder<bool>(
-              future: _activationManager.hasValidActivationLink(),
-              builder: (context, linkSnapshot) {
-                if (linkSnapshot.connectionState == ConnectionState.waiting) {
+              future: _activationManager.isActivated(), // ✅ استخدام isActivated فقط
+              builder: (context, snap) {
+                if (snap.connectionState == ConnectionState.waiting) {
                   return _buildSplashScreen();
                 }
+                bool isActivated = snap.data ?? false;
                 
-                bool hasSavedLink = linkSnapshot.data ?? false;
-                
-                // تحديد الصفحة الرئيسية بناءً على حالة التفعيل والرابط المحفوظ
                 if (isActivated) {
                   return _buildMainScreenWithTimer(remainingSeconds);
                 } else {
-                  // تمرير ActivationManager إلى شاشة التفعيل
-                  return ActivationScreen(
-                    activationManager: _activationManager,
-                    hasSavedLink: hasSavedLink,
-                  );
+                  // ✅ إزالة hasSavedLink بالكامل
+                  return const ActivationScreen();
                 }
               },
             ),
@@ -256,17 +244,16 @@ class MyApp extends StatelessWidget {
 
   Widget _buildMainScreenWithTimer(int remainingSeconds) {
     return WillPopScope(
-      onWillPop: () async => false, // منع الرجوع للخلف
+      onWillPop: () async => false,
       child: TrialTimerProvider(
         remainingSeconds: remainingSeconds,
         onTimerExpired: _handleTimerExpired,
-        child: LoginScreen(),
+        child: const LoginScreen(),
       ),
     );
   }
 
   void _handleTimerExpired() async {
-    // حذف حالة التفعيل فقط - نحتفظ بالرابط المخزن
     await _activationManager.setActivated(false);
   }
 
@@ -357,10 +344,7 @@ class _TrialTimerProviderState extends State<TrialTimerProvider> {
     );
 
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => ActivationScreen(
-        activationManager: ActivationManager(),
-        hasSavedLink: false,
-      )),
+      MaterialPageRoute(builder: (_) => const ActivationScreen()),
       (route) => false,
     );
   }
