@@ -22,6 +22,7 @@ class DateSelectionScreen extends StatefulWidget {
 
 class _DateSelectionScreenState extends State<DateSelectionScreen> {
   DateTime _selectedDate = DateTime.now();
+  bool _timerCheckDone = false;
 
   @override
   void initState() {
@@ -33,9 +34,12 @@ class _DateSelectionScreenState extends State<DateSelectionScreen> {
 
   void _checkTimerExpired() {
     final timerProvider = TrialTimerProvider.of(context);
-    if (timerProvider?.remainingSeconds == 0) {
+    if (timerProvider != null && timerProvider.remainingSeconds <= 0) {
       _navigateToActivationScreen();
     }
+    setState(() {
+      _timerCheckDone = true;
+    });
   }
 
   void _navigateToActivationScreen() {
@@ -144,11 +148,10 @@ class _DateSelectionScreenState extends State<DateSelectionScreen> {
   Widget build(BuildContext context) {
     final timerProvider = TrialTimerProvider.of(context);
     final remainingSeconds = timerProvider?.remainingSeconds ?? 0;
-
-    print('🕒 remainingSeconds in DateSelectionScreen: $remainingSeconds');
+    final bool isTimerExpired = remainingSeconds <= 0;
 
     // التحقق من انتهاء المؤقت
-    if (remainingSeconds == 0) {
+    if (isTimerExpired && _timerCheckDone) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _navigateToActivationScreen();
       });
@@ -175,20 +178,33 @@ class _DateSelectionScreenState extends State<DateSelectionScreen> {
               Navigator.of(context).pop();
             },
           ),
-          // إضافة المؤقت في الـ AppBar
+          // ✅ إضافة المؤقت في الـ AppBar
           actions: [
-            if (remainingSeconds > 0)
+            if (!isTimerExpired)
               Padding(
                 padding: const EdgeInsets.only(right: 16.0),
                 child: Center(
                   child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.white24),
                     ),
-                    child: TrialTimer(
-                      remainingSeconds: remainingSeconds,
-                      onTimerExpired: _navigateToActivationScreen,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.timer_outlined, color: Colors.white, size: 18),
+                        const SizedBox(width: 8),
+                        Text(
+                          _formatTime(remainingSeconds),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -248,7 +264,7 @@ class _DateSelectionScreenState extends State<DateSelectionScreen> {
                 padding: const EdgeInsets.only(bottom: 16.0),
                 child: Center(
                   child: ElevatedButton.icon(
-                    onPressed: remainingSeconds > 0 
+                    onPressed: !isTimerExpired 
                       ? () {
                           Navigator.of(context).push(
                             MaterialPageRoute(
@@ -263,7 +279,7 @@ class _DateSelectionScreenState extends State<DateSelectionScreen> {
                         }
                       : null, // تعطيل الزر إذا انتهى الوقت
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: remainingSeconds > 0 
+                      backgroundColor: !isTimerExpired 
                         ? Colors.green[600] 
                         : Colors.grey[400],
                       foregroundColor: Colors.white,
@@ -278,7 +294,7 @@ class _DateSelectionScreenState extends State<DateSelectionScreen> {
                     ),
                     icon: const Icon(Icons.check_circle_outline, size: 24),
                     label: Text(
-                      remainingSeconds > 0 ? 'دخــول' : 'انتهت الفترة التجريبية',
+                      !isTimerExpired ? 'دخــول' : 'انتهت الفترة التجريبية',
                       style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                     ),
                   ),
@@ -289,5 +305,12 @@ class _DateSelectionScreenState extends State<DateSelectionScreen> {
         ),
       ),
     );
+  }
+
+  // ✅ دالة تنسيق الوقت
+  String _formatTime(int seconds) {
+    int minutes = seconds ~/ 60;
+    int secs = seconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
   }
 }
