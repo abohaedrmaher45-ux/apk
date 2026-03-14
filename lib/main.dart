@@ -1,78 +1,147 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'screens/login_screen.dart';
-import 'security/activation_screen.dart';
+import 'daily_movement_screen.dart';
+import '../main.dart';
+import '../security/activation_screen.dart';
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+class DateSelectionScreen extends StatefulWidget {
+  final String storeType;
+  final String storeName;
+  final String? sellerName;
 
-  await SystemChrome.setPreferredOrientations([
-    DeviceOrientation.landscapeLeft,
-    DeviceOrientation.landscapeRight,
-  ]);
-
-  runApp(MyApp());
-}
-
-// ✅ التحقق من الوقت (واتساب ستايل) - كما كان سليماً
-class _TimeValidator {
-  static Future<bool> isTimeValid() async {
-    final prefs = await SharedPreferences.getInstance();
-    final lastTime = prefs.getInt('last_valid_time');
-    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    
-    if (lastTime == null) {
-      await prefs.setInt('last_valid_time', now);
-      return true;
-    }
-    
-    if (now < lastTime || now > lastTime + 300) return false;
-    
-    await prefs.setInt('last_valid_time', now);
-    return true;
-  }
-}
-
-// ✅ مؤقت منفصل يمكن استخدامه في أي شاشة
-class TrialTimer extends StatefulWidget {
-  final int remainingSeconds;
-  final VoidCallback? onTimerExpired;
-  
-  const TrialTimer({
-    Key? key,
-    required this.remainingSeconds,
-    this.onTimerExpired,
-  }) : super(key: key);
+  const DateSelectionScreen({
+    super.key,
+    required this.storeType,
+    required this.storeName,
+    this.sellerName,
+  });
 
   @override
-  _TrialTimerState createState() => _TrialTimerState();
+  State<DateSelectionScreen> createState() => _DateSelectionScreenState();
 }
 
-class _TrialTimerState extends State<TrialTimer> {
-  late int _remainingSeconds;
-  Timer? _timer;
+class _DateSelectionScreenState extends State<DateSelectionScreen> {
+  DateTime _selectedDate = DateTime.now();
+  bool _navigating = false;
 
   @override
   void initState() {
     super.initState();
-    _remainingSeconds = widget.remainingSeconds;
-    if (_remainingSeconds > 0) _startTimer();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkTimerStatus();
+    });
   }
 
-  void _startTimer() {
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_remainingSeconds > 0) {
-        setState(() => _remainingSeconds--);
-        if (_remainingSeconds == 0 && widget.onTimerExpired != null) {
-          widget.onTimerExpired!();
-        }
-      } else {
-        _timer?.cancel();
-      }
+  void _checkTimerStatus() {
+    final timerProvider = TrialTimerProvider.of(context);
+    if (timerProvider != null && timerProvider.remainingSeconds <= 0 && !_navigating) {
+      _navigateToActivationScreen();
+    }
+  }
+
+  void _navigateToActivationScreen() {
+    if (_navigating) return;
+    _navigating = true;
+    
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const ActivationScreen()),
+      (route) => false,
+    );
+  }
+
+  void _updateDate({int? year, int? month, int? day}) {
+    final currentYear = year ?? _selectedDate.year;
+    final currentMonth = month ?? _selectedDate.month;
+    var currentDay = day ?? _selectedDate.day;
+
+    final daysInMonth = DateUtils.getDaysInMonth(currentYear, currentMonth);
+    if (currentDay > daysInMonth) {
+      currentDay = daysInMonth;
+    }
+
+    setState(() {
+      _selectedDate = DateTime(currentYear, currentMonth, currentDay);
     });
+  }
+
+  Widget _buildCompactPicker(
+    String label,
+    int currentValue,
+    VoidCallback onIncrement,
+    VoidCallback onDecrement, {
+    bool isMonth = false,
+  }) {
+    const months = [
+      'يناير',
+      'فبراير',
+      'مارس',
+      'أبريل',
+      'مايو',
+      'يونيو',
+      'يوليو',
+      'أغسطس',
+      'سبتمبر',
+      'أكتوبر',
+      'نوفمبر',
+      'ديسمبر',
+    ];
+
+    String displayValue =
+        isMonth ? months[currentValue - 1] : currentValue.toString();
+
+    return Flexible(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            '$label:',
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.black54,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey[300]!),
+            ),
+            child: Column(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.arrow_drop_up),
+                  onPressed: onIncrement,
+                  color: Colors.green[600],
+                  iconSize: 24,
+                ),
+                SizedBox(
+                  height: 30,
+                  child: Center(
+                    child: Text(
+                      displayValue,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.arrow_drop_down),
+                  onPressed: onDecrement,
+                  color: Colors.red[600],
+                  iconSize: 24,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   String _formatTime(int seconds) {
@@ -82,273 +151,152 @@ class _TrialTimerState extends State<TrialTimer> {
   }
 
   @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    if (_remainingSeconds <= 0) return const SizedBox.shrink();
-    
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.9),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 5,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.timer, color: Colors.teal, size: 18),
-          const SizedBox(width: 8),
-          Text(
-            _formatTime(_remainingSeconds),
-            style: const TextStyle(
-              color: Colors.teal,
-              fontWeight: FontWeight.bold,
-              fontSize: 14,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
+    final timerProvider = TrialTimerProvider.of(context);
+    final remainingSeconds = timerProvider?.remainingSeconds ?? 0;
+    final bool isTimerActive = remainingSeconds > 0;
 
-class MyApp extends StatelessWidget {
-  MyApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Al Hal Market',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.teal,
-          brightness: Brightness.light,
-        ),
-        useMaterial3: true,
-        fontFamily: 'Arial',
-      ),
-      home: FutureBuilder<Map<String, dynamic>>(
-        future: () async {
-          if (!await _TimeValidator.isTimeValid()) {
-            throw Exception('Invalid time');
-          }
-          return _getTrialStatus();
-        }(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return _buildSplashScreen();
-          }
-
-          int remainingSeconds = snapshot.data?['remainingSeconds'] ?? 0;
-          
-          return _TrialTimerWrapper(
-            remainingSeconds: remainingSeconds,
-            child: FutureBuilder<bool>(
-              future: _checkActivationStatus(),
-              builder: (context, snap) {
-                if (snap.connectionState == ConnectionState.waiting) {
-                  return _buildSplashScreen();
-                }
-                bool isActivated = snap.data ?? false;
-                
-                // تحديد الصفحة الرئيسية بناءً على حالة التفعيل
-                if (isActivated) {
-                  return _buildMainScreenWithTimer(remainingSeconds);
-                } else {
-                  return const ActivationScreen();
-                }
-              },
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildMainScreenWithTimer(int remainingSeconds) {
     return WillPopScope(
-      onWillPop: () async => false, // منع الرجوع للخلف
-      child: TrialTimerProvider(
-        remainingSeconds: remainingSeconds,
-        onTimerExpired: _handleTimerExpired,
-        child: const LoginScreen(),
-      ),
-    );
-  }
-
-  void _handleTimerExpired() async {
-    // حذف حالة التفعيل فقط - نحتفظ بالرابط المخزن
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('is_activated', false);
-  }
-
-  Future<Map<String, dynamic>> _getTrialStatus() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      bool isActivated = prefs.getBool('is_activated') ?? false;
-      
-      // ✅ استخدام SharedPreferences لتخزين تاريخ أول تشغيل
-      String? firstLaunchStr = prefs.getString('first_launch_date');
-      
-      if (firstLaunchStr == null) {
-        String now = DateTime.now().toIso8601String();
-        await prefs.setString('first_launch_date', now);
-        return {'remainingSeconds': 15 * 60};
-      }
-      
-      DateTime firstLaunch = DateTime.parse(firstLaunchStr);
-      DateTime now = DateTime.now();
-      const trialSeconds = 15 * 60;
-      int remaining = trialSeconds - now.difference(firstLaunch).inSeconds;
-      
-      return {'remainingSeconds': remaining < 0 ? 0 : remaining};
-    } catch (e) {
-      return {'remainingSeconds': 0};
-    }
-  }
-
-  Future<bool> _checkActivationStatus() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      return prefs.getBool('is_activated') ?? false;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  Widget _buildSplashScreen() {
-    return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Colors.teal.shade800, Colors.teal.shade500],
+      onWillPop: () async {
+        SystemNavigator.pop();
+        return false;
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text(
+            'اختيار التاريخ',
+            style: TextStyle(fontWeight: FontWeight.bold),
           ),
+          backgroundColor: Colors.teal[600],
+          foregroundColor: Colors.white,
+          centerTitle: true,
+          automaticallyImplyLeading: false,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () {
+              Navigator.of(context).pop();
+            },
+          ),
+          actions: [
+            if (isTimerActive)
+              Padding(
+                padding: const EdgeInsets.only(right: 16.0),
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.white24),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.timer_outlined, color: Colors.white, size: 18),
+                        const SizedBox(width: 8),
+                        Text(
+                          _formatTime(remainingSeconds),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
-        child: const Center(
+        body: Directionality(
+          textDirection: TextDirection.rtl,
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.shopping_cart, size: 100, color: Colors.white),
-              SizedBox(height: 20),
-              Text('Al Hal Market', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white)),
-              SizedBox(height: 10),
-              Text('محاسب سوق الهال', style: TextStyle(fontSize: 18, color: Colors.white)),
-              SizedBox(height: 30),
-              CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
-              SizedBox(height: 20),
-              Text('جاري تحميل التطبيق...', style: TextStyle(color: Colors.white)),
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Align(
+                  alignment: Alignment.topRight,
+                  child: Text(
+                    '${_selectedDate.year}/${_selectedDate.month}/${_selectedDate.day}',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black54,
+                    ),
+                  ),
+                ),
+              ),
+              
+              Expanded(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _buildCompactPicker(
+                      'اليوم',
+                      _selectedDate.day,
+                      () => _updateDate(day: _selectedDate.day + 1),
+                      () => _updateDate(day: _selectedDate.day - 1),
+                    ),
+                    _buildCompactPicker(
+                      'الشهر',
+                      _selectedDate.month,
+                      () => _updateDate(month: _selectedDate.month + 1),
+                      () => _updateDate(month: _selectedDate.month - 1),
+                      isMonth: true,
+                    ),
+                    _buildCompactPicker(
+                      'السنة',
+                      _selectedDate.year,
+                      () => _updateDate(year: _selectedDate.year + 1),
+                      () => _updateDate(year: _selectedDate.year - 1),
+                    ),
+                  ],
+                ),
+              ),
+              
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16.0),
+                child: Center(
+                  child: ElevatedButton.icon(
+                    onPressed: isTimerActive 
+                      ? () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => DailyMovementScreen(
+                                selectedDate:
+                                    '${_selectedDate.year}/${_selectedDate.month}/${_selectedDate.day}',
+                                storeType: widget.storeType,
+                                sellerName: widget.sellerName ?? 'غير معروف',
+                              ),
+                            ),
+                          );
+                        }
+                      : null,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: isTimerActive ? Colors.green[600] : Colors.grey[400],
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 60,
+                        vertical: 18,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 4,
+                    ),
+                    icon: const Icon(Icons.check_circle_outline, size: 24),
+                    label: Text(
+                      isTimerActive ? 'دخــول' : 'انتهت الفترة التجريبية',
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
         ),
       ),
     );
-  }
-}
-
-// ✅ مزود المؤقت للتطبيق كله
-class TrialTimerProvider extends StatefulWidget {
-  final Widget child;
-  final int remainingSeconds;
-  final VoidCallback onTimerExpired;
-
-  const TrialTimerProvider({
-    Key? key,
-    required this.child,
-    required this.remainingSeconds,
-    required this.onTimerExpired,
-  }) : super(key: key);
-
-  @override
-  _TrialTimerProviderState createState() => _TrialTimerProviderState();
-
-  static _TrialTimerProviderState? of(BuildContext context) {
-    return context.findAncestorStateOfType<_TrialTimerProviderState>();
-  }
-}
-
-class _TrialTimerProviderState extends State<TrialTimerProvider> {
-  late int _remainingSeconds;
-  Timer? _timer;
-
-  @override
-  void initState() {
-    super.initState();
-    _remainingSeconds = widget.remainingSeconds;
-    if (_remainingSeconds > 0) _startTimer();
-  }
-
-  void _startTimer() {
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_remainingSeconds > 0) {
-        setState(() => _remainingSeconds--);
-        if (_remainingSeconds == 0) {
-          _timer?.cancel();
-          widget.onTimerExpired();
-          _redirectToActivationScreen();
-        }
-      } else {
-        _timer?.cancel();
-      }
-    });
-  }
-
-  Future<void> _redirectToActivationScreen() async {
-    if (!mounted) return;
-
-    // إظهار رسالة للمستخدم
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('انتهت الفترة التجريبية. يرجى إدخال رابط التفعيل مرة أخرى.'),
-        duration: Duration(seconds: 3),
-      ),
-    );
-
-    // العودة إلى شاشة التفعيل
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const ActivationScreen()),
-      (route) => false,
-    );
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  // دالة للوصول إلى الوقت المتبقي من أي مكان
-  int get remainingSeconds => _remainingSeconds;
-
-  @override
-  Widget build(BuildContext context) {
-    return widget.child;
-  }
-}
-
-// ✅ Wrapper محدث مع دعم التنقل
-class _TrialTimerWrapper extends StatelessWidget {
-  final Widget child;
-  final int remainingSeconds;
-  
-  const _TrialTimerWrapper({
-    required this.child,
-    this.remainingSeconds = 0,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return child;
   }
 }
