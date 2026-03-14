@@ -17,7 +17,7 @@ void main() async {
   runApp(MyApp());
 }
 
-// ✅ مدير التفعيل - كلاس Singleton
+// ✅ مدير التفعيل المحسن مع الحماية الكاملة
 class ActivationManager {
   static final ActivationManager _instance = ActivationManager._internal();
   factory ActivationManager() => _instance;
@@ -29,6 +29,7 @@ class ActivationManager {
   static const String _isActivatedKey = 'is_activated';
   static const String _lastValidTimeKey = 'last_valid_time';
   static const String _firstLaunchKey = 'first_launch_date';
+  static const String _encryptedFirstLaunchKey = 'encrypted_first_launch';
 
   // ✅ حفظ رابط التفعيل
   Future<void> saveActivationLink(String link) async {
@@ -52,7 +53,53 @@ class ActivationManager {
     return prefs.getBool(_isActivatedKey) ?? false;
   }
 
-  // ✅ التحقق من الوقت
+  // ✅ حفظ تاريخ أول تشغيل بشكل آمن
+  Future<void> saveFirstLaunchSecurely() async {
+    try {
+      final now = DateTime.now().toIso8601String();
+      
+      // 1️⃣ حفظ في الـ secure storage (مشفر)
+      await secureStorage.write(key: _encryptedFirstLaunchKey, value: now);
+      
+      // 2️⃣ حفظ نسخة في SharedPreferences للمقارنة
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_firstLaunchKey, now);
+      
+      print('✅ First launch saved securely: $now');
+    } catch (e) {
+      print('❌ Error saving first launch: $e');
+    }
+  }
+
+  // ✅ قراءة تاريخ أول تشغيل مع التحقق من التلاعب
+  Future<DateTime?> getFirstLaunchSecurely() async {
+    try {
+      // 1️⃣ قراءة من التخزين المشفر (المصدر الرئيسي)
+      final encryptedDate = await secureStorage.read(key: _encryptedFirstLaunchKey);
+      
+      // 2️⃣ قراءة من SharedPreferences (للمقارنة)
+      final prefs = await SharedPreferences.getInstance();
+      final prefsDate = prefs.getString(_firstLaunchKey);
+      
+      // 3️⃣ التحقق من التطابق (إذا اختلفا فهذا يعني تلاعب)
+      if (encryptedDate != null && prefsDate != null && encryptedDate != prefsDate) {
+        print('⚠️ Tampering detected! Dates do not match');
+        return null;
+      }
+      
+      // 4️⃣ التحقق من صحة التاريخ
+      if (encryptedDate != null) {
+        return DateTime.parse(encryptedDate);
+      }
+      
+      return null;
+    } catch (e) {
+      print('❌ Error reading first launch: $e');
+      return null;
+    }
+  }
+
+  // ✅ التحقق من الوقت (واتساب ستايل)
   Future<bool> isTimeValid() async {
     final prefs = await SharedPreferences.getInstance();
     final lastTime = prefs.getInt(_lastValidTimeKey);
@@ -63,37 +110,90 @@ class ActivationManager {
       return true;
     }
     
-    if (now < lastTime || now > lastTime + 300) return false;
+    // منع الرجوع للخلف في الوقت
+    if (now < lastTime) {
+      print('⚠️ Time went backwards!');
+      return false;
+    }
+    
+    // منع التقدم الكبير في الوقت (أكثر من 5 دقائق)
+    if (now > lastTime + 300) {
+      print('⚠️ Time jumped forward too much!');
+      return false;
+    }
     
     await prefs.setInt(_lastValidTimeKey, now);
     return true;
   }
 
-  // ✅ الحصول على حالة الفترة التجريبية
-  Future<Map<String, dynamic>> getTrialStatus() async {
+  // ✅ الحصول على حالة الفترة التجريبية بشكل آمن
+  Future<Map<String, dynamic>> getTrialStatusSecurely() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       bool isActivated = prefs.getBool(_isActivatedKey) ?? false;
       
-      String? firstLaunchStr = await secureStorage.read(key: _firstLaunchKey);
-      
-      if (firstLaunchStr == null) {
-        String now = DateTime.now().toIso8601String();
-        await secureStorage.write(key: _firstLaunchKey, value: now);
-        return {'remainingSeconds': 15 * 60, 'isActivated': isActivated};
+      // ✅ التحقق من الوقت أولاً
+      bool timeValid = await isTimeValid();
+      if (!timeValid) {
+        print('⚠️ Time manipulation detected! Blocking access.');
+        return {
+          'remainingSeconds': 0,
+          'isActivated': false,
+          'timeManipulated': true
+        };
       }
       
-      DateTime firstLaunch = DateTime.parse(firstLaunchStr);
+      // ✅ قراءة التاريخ من التخزين الآمن
+      DateTime? firstLaunch = await getFirstLaunchSecurely();
+      
+      if (firstLaunch == null) {
+        // أول مرة يتم فيها فتح التطبيق
+        await saveFirstLaunchSecurely();
+        print('🕒 First launch: 15 minutes remaining');
+        return {
+          'remainingSeconds': 15 * 60, // 15 دقيقة كاملة
+          'isActivated': isActivated,
+          'timeManipulated': false
+        };
+      }
+      
+      // حساب الوقت المتبقي
       DateTime now = DateTime.now();
-      const trialSeconds = 15 * 60;
-      int remaining = trialSeconds - now.difference(firstLaunch).inSeconds;
+      const trialSeconds = 15 * 60; // 15 دقيقة بالثواني
+      
+      int elapsedSeconds = now.difference(firstLaunch).inSeconds;
+      
+      // ✅ التحقق من أن الوقت لم يرجع للخلف
+      if (elapsedSeconds < 0) {
+        print('⚠️ Time went backwards! Resetting trial.');
+        await saveFirstLaunchSecurely(); // إعادة تعيين التاريخ
+        return {
+          'remainingSeconds': 15 * 60,
+          'isActivated': isActivated,
+          'timeManipulated': true
+        };
+      }
+      
+      int remaining = trialSeconds - elapsedSeconds;
+      
+      print('🕒 First launch: $firstLaunch');
+      print('🕒 Now: $now');
+      print('🕒 Elapsed: ${elapsedSeconds ~/ 60} minutes');
+      print('🕒 Remaining: ${remaining ~/ 60} minutes');
       
       return {
         'remainingSeconds': remaining < 0 ? 0 : remaining,
-        'isActivated': isActivated
+        'isActivated': isActivated,
+        'timeManipulated': false
       };
+      
     } catch (e) {
-      return {'remainingSeconds': 0, 'isActivated': false};
+      print('❌ Error in getTrialStatusSecurely: $e');
+      return {
+        'remainingSeconds': 0,
+        'isActivated': false,
+        'timeManipulated': true
+      };
     }
   }
 }
@@ -121,6 +221,7 @@ class _TrialTimerState extends State<TrialTimer> {
   void initState() {
     super.initState();
     _remainingSeconds = widget.remainingSeconds;
+    print('🕒 TrialTimer initialized with: $_remainingSeconds seconds');
     if (_remainingSeconds > 0) _startTimer();
   }
 
@@ -204,24 +305,31 @@ class MyApp extends StatelessWidget {
         fontFamily: 'Arial',
       ),
       home: FutureBuilder<Map<String, dynamic>>(
-        future: () async {
-          if (!await _activationManager.isTimeValid()) {
-            throw Exception('Invalid time');
-          }
-          return _activationManager.getTrialStatus();
-        }(),
+        future: _activationManager.getTrialStatusSecurely(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return _buildSplashScreen();
           }
 
+          if (snapshot.hasError) {
+            print('❌ Error: ${snapshot.error}');
+            return _buildErrorScreen();
+          }
+
           int remainingSeconds = snapshot.data?['remainingSeconds'] ?? 0;
           bool isActivated = snapshot.data?['isActivated'] ?? false;
+          bool timeManipulated = snapshot.data?['timeManipulated'] ?? false;
+          
+          print('🕒 App starting with: $remainingSeconds seconds remaining');
+          
+          if (timeManipulated) {
+            return _buildTamperingScreen();
+          }
           
           return _TrialTimerWrapper(
             remainingSeconds: remainingSeconds,
             child: FutureBuilder<bool>(
-              future: _activationManager.isActivated(), // ✅ استخدام isActivated فقط
+              future: _activationManager.isActivated(),
               builder: (context, snap) {
                 if (snap.connectionState == ConnectionState.waiting) {
                   return _buildSplashScreen();
@@ -231,7 +339,6 @@ class MyApp extends StatelessWidget {
                 if (isActivated) {
                   return _buildMainScreenWithTimer(remainingSeconds);
                 } else {
-                  // ✅ إزالة hasSavedLink بالكامل
                   return const ActivationScreen();
                 }
               },
@@ -254,6 +361,7 @@ class MyApp extends StatelessWidget {
   }
 
   void _handleTimerExpired() async {
+    print('🕒 Timer expired!');
     await _activationManager.setActivated(false);
   }
 
@@ -278,6 +386,54 @@ class MyApp extends StatelessWidget {
               CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
               SizedBox(height: 20),
               Text('جاري تحميل التطبيق...', style: TextStyle(color: Colors.white)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildErrorScreen() {
+    return Scaffold(
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.red.shade800, Colors.red.shade500],
+          ),
+        ),
+        child: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.error_outline, size: 100, color: Colors.white),
+              SizedBox(height: 20),
+              Text('حدث خطأ في التطبيق', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
+              SizedBox(height: 10),
+              Text('يرجى إعادة تشغيل التطبيق', style: TextStyle(fontSize: 18, color: Colors.white)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTamperingScreen() {
+    return Scaffold(
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.orange.shade800, Colors.orange.shade500],
+          ),
+        ),
+        child: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.warning_amber_rounded, size: 100, color: Colors.white),
+              SizedBox(height: 20),
+              Text('تم اكتشاف تلاعب في النظام', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
+              SizedBox(height: 10),
+              Text('يرجى عدم العبث بوقت الجهاز', style: TextStyle(fontSize: 18, color: Colors.white)),
             ],
           ),
         ),
@@ -315,13 +471,16 @@ class _TrialTimerProviderState extends State<TrialTimerProvider> {
   void initState() {
     super.initState();
     _remainingSeconds = widget.remainingSeconds;
+    print('🕒 TrialTimerProvider initialized with: $_remainingSeconds seconds');
     if (_remainingSeconds > 0) _startTimer();
   }
 
   void _startTimer() {
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_remainingSeconds > 0) {
-        setState(() => _remainingSeconds--);
+        setState(() {
+          _remainingSeconds--;
+        });
         if (_remainingSeconds == 0) {
           _timer?.cancel();
           widget.onTimerExpired();
