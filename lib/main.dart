@@ -189,13 +189,13 @@ class MyApp extends StatelessWidget {
   }
 
   void _handleTimerExpired() async {
-    // حذف حالة التفعيل
+    // حذف حالة التفعيل فقط - نحتفظ بالرابط المخزن
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('is_activated', false);
     
-    // حذف تاريخ أول تشغيل ليبدأ المؤقت من جديد
-    const storage = FlutterSecureStorage();
-    await storage.delete(key: 'first_launch_date');
+    // لا نحذف الرابط المخزن (first_launch_date) حتى لا يطلب مرة أخرى
+    // const storage = FlutterSecureStorage();
+    // await storage.delete(key: 'first_launch_date');
   }
 
   Future<Map<String, dynamic>> _getTrialStatus() async {

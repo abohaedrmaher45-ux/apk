@@ -138,25 +138,102 @@ class _DateSelectionScreenState extends State<DateSelectionScreen> {
           backgroundColor: Colors.teal[600],
           foregroundColor: Colors.white,
           centerTitle: true,
-          // إضافة المؤقت في AppBar
-          actions: [
-            if (remainingSeconds > 0)
-              Padding(
-                padding: const EdgeInsets.only(left: 16.0),
-                child: Center(
-                  child: TrialTimer(
-                    remainingSeconds: remainingSeconds,
-                  ),
-                ),
-              ),
-          ],
-          // تم إزالة زر الرجوع (السهم) من AppBar
+          // تم إزالة المؤقت من AppBar
           automaticallyImplyLeading: false,
         ),
         body: Directionality(
           textDirection: TextDirection.rtl,
           child: Column(
             children: [
+              // ✅ المؤقت في أعلى الصفحة بشكل واضح وبارز
+              if (remainingSeconds > 0)
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Colors.teal.shade700, Colors.teal.shade500],
+                      begin: Alignment.topRight,
+                      end: Alignment.topLeft,
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.teal.shade200.withOpacity(0.5),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.3),
+                      width: 2,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      // النص التوضيحي
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(
+                              Icons.timer_outlined,
+                              color: Colors.white,
+                              size: 28,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          const Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'الوقت المتبقي',
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              Text(
+                                'الفترة التجريبية',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      // عداد الوقت بشكل كبير وواضح
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 5,
+                            ),
+                          ],
+                        ),
+                        child: TrialTimer(
+                          remainingSeconds: remainingSeconds,
+                          onTimerExpired: timerProvider?.widget.onTimerExpired,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              // باقي محتوى الصفحة
               Padding(
                 padding: const EdgeInsets.all(8.0),
                 child: Align(
