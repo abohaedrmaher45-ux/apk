@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'daily_movement_screen.dart';
-import '../main.dart'; // استيراد TrialTimerProvider و TrialTimer
+import '../main.dart';
+import '../security/activation_screen.dart';
 
 class DateSelectionScreen extends StatefulWidget {
   final String storeType;
@@ -21,6 +22,28 @@ class DateSelectionScreen extends StatefulWidget {
 
 class _DateSelectionScreenState extends State<DateSelectionScreen> {
   DateTime _selectedDate = DateTime.now();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkTimerExpired();
+    });
+  }
+
+  void _checkTimerExpired() {
+    final timerProvider = TrialTimerProvider.of(context);
+    if (timerProvider?.remainingSeconds == 0) {
+      _navigateToActivationScreen();
+    }
+  }
+
+  void _navigateToActivationScreen() {
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const ActivationScreen()),
+      (route) => false,
+    );
+  }
 
   void _updateDate({int? year, int? month, int? day}) {
     final currentYear = year ?? _selectedDate.year;
@@ -119,11 +142,17 @@ class _DateSelectionScreenState extends State<DateSelectionScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // الحصول على وقت المؤقت من الـ Provider
     final timerProvider = TrialTimerProvider.of(context);
     final remainingSeconds = timerProvider?.remainingSeconds ?? 0;
 
-    print('🕒 remainingSeconds in DateSelectionScreen: $remainingSeconds'); // للتأكد
+    print('🕒 remainingSeconds in DateSelectionScreen: $remainingSeconds');
+
+    // التحقق من انتهاء المؤقت
+    if (remainingSeconds == 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _navigateToActivationScreen();
+      });
+    }
 
     return WillPopScope(
       onWillPop: () async {
@@ -146,29 +175,31 @@ class _DateSelectionScreenState extends State<DateSelectionScreen> {
               Navigator.of(context).pop();
             },
           ),
+          // إضافة المؤقت في الـ AppBar
+          actions: [
+            if (remainingSeconds > 0)
+              Padding(
+                padding: const EdgeInsets.only(right: 16.0),
+                child: Center(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: TrialTimer(
+                      remainingSeconds: remainingSeconds,
+                      onTimerExpired: _navigateToActivationScreen,
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
         body: Directionality(
           textDirection: TextDirection.rtl,
           child: Column(
             children: [
-              // ✅ المؤتمر - يستخدم TrialTimer الجاهز
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: TrialTimer(
-                  remainingSeconds: remainingSeconds,
-                  onTimerExpired: () {
-                    // اختياري: إجراء عند انتهاء الوقت
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('انتهت الفترة التجريبية'),
-                        duration: Duration(seconds: 2),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              
-              // ✅ التاريخ المحدد
+              // التاريخ المحدد
               Padding(
                 padding: const EdgeInsets.all(8.0),
                 child: Align(
@@ -184,7 +215,7 @@ class _DateSelectionScreenState extends State<DateSelectionScreen> {
                 ),
               ),
               
-              // ✅ منتقي التاريخ
+              // منتقي التاريخ
               Expanded(
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -212,25 +243,29 @@ class _DateSelectionScreenState extends State<DateSelectionScreen> {
                 ),
               ),
               
-              // ✅ زر الدخول
+              // زر الدخول
               Padding(
                 padding: const EdgeInsets.only(bottom: 16.0),
                 child: Center(
                   child: ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (context) => DailyMovementScreen(
-                            selectedDate:
-                                '${_selectedDate.year}/${_selectedDate.month}/${_selectedDate.day}',
-                            storeType: widget.storeType,
-                            sellerName: widget.sellerName ?? 'غير معروف',
-                          ),
-                        ),
-                      );
-                    },
+                    onPressed: remainingSeconds > 0 
+                      ? () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => DailyMovementScreen(
+                                selectedDate:
+                                    '${_selectedDate.year}/${_selectedDate.month}/${_selectedDate.day}',
+                                storeType: widget.storeType,
+                                sellerName: widget.sellerName ?? 'غير معروف',
+                              ),
+                            ),
+                          );
+                        }
+                      : null, // تعطيل الزر إذا انتهى الوقت
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green[600],
+                      backgroundColor: remainingSeconds > 0 
+                        ? Colors.green[600] 
+                        : Colors.grey[400],
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(
                         horizontal: 60,
@@ -242,9 +277,9 @@ class _DateSelectionScreenState extends State<DateSelectionScreen> {
                       elevation: 4,
                     ),
                     icon: const Icon(Icons.check_circle_outline, size: 24),
-                    label: const Text(
-                      'دخــول',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    label: Text(
+                      remainingSeconds > 0 ? 'دخــول' : 'انتهت الفترة التجريبية',
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                     ),
                   ),
                 ),
