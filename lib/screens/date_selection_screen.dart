@@ -117,6 +117,21 @@ class _DateSelectionScreenState extends State<DateSelectionScreen> {
     );
   }
 
+  // ✅ دالة مساعدة لتحديد لون المؤقت حسب الوقت المتبقي
+  Color _getTimerColor(int seconds) {
+    if (seconds <= 60) return Colors.red;
+    if (seconds <= 300) return Colors.orange;
+    return Colors.teal;
+  }
+
+  // ✅ دالة لتنسيق الوقت
+  String _formatTime(int seconds) {
+    if (seconds <= 0) return '00:00';
+    int minutes = seconds ~/ 60;
+    int secs = seconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
+  }
+
   @override
   Widget build(BuildContext context) {
     // الحصول على وقت المؤقت من الـ Provider
@@ -138,14 +153,20 @@ class _DateSelectionScreenState extends State<DateSelectionScreen> {
           backgroundColor: Colors.teal[600],
           foregroundColor: Colors.white,
           centerTitle: true,
-          // تم إزالة المؤقت من AppBar
           automaticallyImplyLeading: false,
+          // ✅ إضافة زر الرجوع إلى AppBar
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () {
+              Navigator.of(context).pop();
+            },
+          ),
         ),
         body: Directionality(
           textDirection: TextDirection.rtl,
           child: Column(
             children: [
-              // ✅ المؤقت في أعلى الصفحة بشكل واضح وبارز
+              // ✅ المؤقت المحسن في أعلى الصفحة
               if (remainingSeconds > 0)
                 Container(
                   width: double.infinity,
@@ -153,87 +174,100 @@ class _DateSelectionScreenState extends State<DateSelectionScreen> {
                   padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [Colors.teal.shade700, Colors.teal.shade500],
-                      begin: Alignment.topRight,
-                      end: Alignment.topLeft,
+                      colors: [
+                        _getTimerColor(remainingSeconds).withOpacity(0.1),
+                        _getTimerColor(remainingSeconds).withOpacity(0.05),
+                      ],
                     ),
                     borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: _getTimerColor(remainingSeconds).withOpacity(0.3),
+                      width: 2,
+                    ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.teal.shade200.withOpacity(0.5),
+                        color: _getTimerColor(remainingSeconds).withOpacity(0.2),
                         blurRadius: 10,
                         offset: const Offset(0, 4),
                       ),
                     ],
-                    border: Border.all(
-                      color: Colors.white.withOpacity(0.3),
-                      width: 2,
-                    ),
                   ),
                   child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      // النص التوضيحي
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Icon(
-                              Icons.timer_outlined,
-                              color: Colors.white,
-                              size: 28,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          const Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'الوقت المتبقي',
-                                style: TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              Text(
-                                'الفترة التجريبية',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                      // عداد الوقت بشكل كبير وواضح
+                      // أيقونة المؤقت
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                        padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
-                              blurRadius: 5,
+                          color: _getTimerColor(remainingSeconds).withOpacity(0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          remainingSeconds < 300 
+                            ? Icons.timer_off_outlined 
+                            : Icons.timer_outlined,
+                          color: _getTimerColor(remainingSeconds),
+                          size: 30,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      
+                      // النصوص
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'الوقت المتبقي في الفترة التجريبية',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _formatTime(remainingSeconds),
+                              style: TextStyle(
+                                fontSize: 28,
+                                fontWeight: FontWeight.bold,
+                                color: _getTimerColor(remainingSeconds),
+                                letterSpacing: 2,
+                              ),
                             ),
                           ],
                         ),
-                        child: TrialTimer(
-                          remainingSeconds: remainingSeconds,
-                          onTimerExpired: timerProvider?.widget.onTimerExpired,
+                      ),
+                      
+                      // شريط التقدم الصغير
+                      Container(
+                        width: 60,
+                        height: 60,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            CircularProgressIndicator(
+                              value: remainingSeconds / 900, // 15 دقيقة
+                              backgroundColor: Colors.grey.shade200,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                _getTimerColor(remainingSeconds)
+                              ),
+                              strokeWidth: 4,
+                            ),
+                            Text(
+                              '${((remainingSeconds / 900) * 100).toStringAsFixed(0)}%',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: _getTimerColor(remainingSeconds),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
                 ),
-              // باقي محتوى الصفحة
+              
+              // باقي محتوى الصفحة (بدون تغيير)
               Padding(
                 padding: const EdgeInsets.all(8.0),
                 child: Align(

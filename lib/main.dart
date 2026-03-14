@@ -17,22 +17,91 @@ void main() async {
   runApp(MyApp());
 }
 
-// ✅ التحقق من الوقت (واتساب ستايل)
-class _TimeValidator {
-  static Future<bool> isTimeValid() async {
+// ✅ مدير التفعيل - مسؤول عن حفظ واسترجاع رابط التفعيل
+class ActivationManager {
+  static final ActivationManager _instance = ActivationManager._internal();
+  factory ActivationManager() => _instance;
+  ActivationManager._internal();
+
+  final FlutterSecureStorage secureStorage = const FlutterSecureStorage();
+  final SharedPreferencesAsync asyncPrefs = SharedPreferencesAsync();
+  
+  static const String _activationLinkKey = 'activation_link';
+  static const String _isActivatedKey = 'is_activated';
+  static const String _lastValidTimeKey = 'last_valid_time';
+  static const String _firstLaunchKey = 'first_launch_date';
+
+  // ✅ حفظ رابط التفعيل
+  Future<void> saveActivationLink(String link) async {
+    await secureStorage.write(key: _activationLinkKey, value: link);
+  }
+
+  // ✅ استرجاع رابط التفعيل
+  Future<String?> getActivationLink() async {
+    return await secureStorage.read(key: _activationLinkKey);
+  }
+
+  // ✅ التحقق من وجود رابط مفعل
+  Future<bool> hasValidActivationLink() async {
+    final link = await getActivationLink();
+    return link != null && link.isNotEmpty;
+  }
+
+  // ✅ حفظ حالة التفعيل
+  Future<void> setActivated(bool value) async {
     final prefs = await SharedPreferences.getInstance();
-    final lastTime = prefs.getInt('last_valid_time');
+    await prefs.setBool(_isActivatedKey, value);
+  }
+
+  // ✅ التحقق من حالة التفعيل
+  Future<bool> isActivated() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_isActivatedKey) ?? false;
+  }
+
+  // ✅ التحقق من الوقت
+  Future<bool> isTimeValid() async {
+    final prefs = await SharedPreferences.getInstance();
+    final lastTime = prefs.getInt(_lastValidTimeKey);
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     
     if (lastTime == null) {
-      await prefs.setInt('last_valid_time', now);
+      await prefs.setInt(_lastValidTimeKey, now);
       return true;
     }
     
     if (now < lastTime || now > lastTime + 300) return false;
     
-    await prefs.setInt('last_valid_time', now);
+    await prefs.setInt(_lastValidTimeKey, now);
     return true;
+  }
+
+  // ✅ الحصول على حالة الفترة التجريبية
+  Future<Map<String, dynamic>> getTrialStatus() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      bool isActivated = prefs.getBool(_isActivatedKey) ?? false;
+      
+      String? firstLaunchStr = await secureStorage.read(key: _firstLaunchKey);
+      
+      if (firstLaunchStr == null) {
+        String now = DateTime.now().toIso8601String();
+        await secureStorage.write(key: _firstLaunchKey, value: now);
+        return {'remainingSeconds': 15 * 60, 'isActivated': isActivated};
+      }
+      
+      DateTime firstLaunch = DateTime.parse(firstLaunchStr);
+      DateTime now = DateTime.now();
+      const trialSeconds = 15 * 60;
+      int remaining = trialSeconds - now.difference(firstLaunch).inSeconds;
+      
+      return {
+        'remainingSeconds': remaining < 0 ? 0 : remaining,
+        'isActivated': isActivated
+      };
+    } catch (e) {
+      return {'remainingSeconds': 0, 'isActivated': false};
+    }
   }
 }
 
@@ -124,6 +193,8 @@ class _TrialTimerState extends State<TrialTimer> {
 }
 
 class MyApp extends StatelessWidget {
+  final ActivationManager _activationManager = ActivationManager();
+  
   MyApp({super.key});
 
   @override
@@ -141,10 +212,10 @@ class MyApp extends StatelessWidget {
       ),
       home: FutureBuilder<Map<String, dynamic>>(
         future: () async {
-          if (!await _TimeValidator.isTimeValid()) {
+          if (!await _activationManager.isTimeValid()) {
             throw Exception('Invalid time');
           }
-          return _getTrialStatus();
+          return _activationManager.getTrialStatus();
         }(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -152,22 +223,28 @@ class MyApp extends StatelessWidget {
           }
 
           int remainingSeconds = snapshot.data?['remainingSeconds'] ?? 0;
+          bool isActivated = snapshot.data?['isActivated'] ?? false;
           
           return _TrialTimerWrapper(
             remainingSeconds: remainingSeconds,
             child: FutureBuilder<bool>(
-              future: _checkActivationStatus(),
-              builder: (context, snap) {
-                if (snap.connectionState == ConnectionState.waiting) {
+              future: _activationManager.hasValidActivationLink(),
+              builder: (context, linkSnapshot) {
+                if (linkSnapshot.connectionState == ConnectionState.waiting) {
                   return _buildSplashScreen();
                 }
-                bool isActivated = snap.data ?? false;
                 
-                // تحديد الصفحة الرئيسية بناءً على حالة التفعيل
+                bool hasSavedLink = linkSnapshot.data ?? false;
+                
+                // تحديد الصفحة الرئيسية بناءً على حالة التفعيل والرابط المحفوظ
                 if (isActivated) {
                   return _buildMainScreenWithTimer(remainingSeconds);
                 } else {
-                  return const ActivationScreen();
+                  // تمرير ActivationManager إلى شاشة التفعيل
+                  return ActivationScreen(
+                    activationManager: _activationManager,
+                    hasSavedLink: hasSavedLink,
+                  );
                 }
               },
             ),
@@ -183,53 +260,14 @@ class MyApp extends StatelessWidget {
       child: TrialTimerProvider(
         remainingSeconds: remainingSeconds,
         onTimerExpired: _handleTimerExpired,
-        child: const LoginScreen(),
+        child: LoginScreen(),
       ),
     );
   }
 
   void _handleTimerExpired() async {
     // حذف حالة التفعيل فقط - نحتفظ بالرابط المخزن
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('is_activated', false);
-    
-    // لا نحذف الرابط المخزن (first_launch_date) حتى لا يطلب مرة أخرى
-    // const storage = FlutterSecureStorage();
-    // await storage.delete(key: 'first_launch_date');
-  }
-
-  Future<Map<String, dynamic>> _getTrialStatus() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      bool isActivated = prefs.getBool('is_activated') ?? false;
-      
-      final storage = FlutterSecureStorage();
-      String? firstLaunchStr = await storage.read(key: 'first_launch_date');
-      
-      if (firstLaunchStr == null) {
-        String now = DateTime.now().toIso8601String();
-        await storage.write(key: 'first_launch_date', value: now);
-        return {'remainingSeconds': 15 * 60};
-      }
-      
-      DateTime firstLaunch = DateTime.parse(firstLaunchStr);
-      DateTime now = DateTime.now();
-      const trialSeconds = 15 * 60;
-      int remaining = trialSeconds - now.difference(firstLaunch).inSeconds;
-      
-      return {'remainingSeconds': remaining < 0 ? 0 : remaining};
-    } catch (e) {
-      return {'remainingSeconds': 0};
-    }
-  }
-
-  Future<bool> _checkActivationStatus() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      return prefs.getBool('is_activated') ?? false;
-    } catch (e) {
-      return false;
-    }
+    await _activationManager.setActivated(false);
   }
 
   Widget _buildSplashScreen() {
@@ -311,7 +349,6 @@ class _TrialTimerProviderState extends State<TrialTimerProvider> {
   Future<void> _redirectToActivationScreen() async {
     if (!mounted) return;
 
-    // إظهار رسالة للمستخدم
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('انتهت الفترة التجريبية. يرجى إدخال رابط التفعيل مرة أخرى.'),
@@ -319,9 +356,11 @@ class _TrialTimerProviderState extends State<TrialTimerProvider> {
       ),
     );
 
-    // العودة إلى شاشة التفعيل
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const ActivationScreen()),
+      MaterialPageRoute(builder: (_) => ActivationScreen(
+        activationManager: ActivationManager(),
+        hasSavedLink: false,
+      )),
       (route) => false,
     );
   }
@@ -332,12 +371,10 @@ class _TrialTimerProviderState extends State<TrialTimerProvider> {
     super.dispose();
   }
 
-  // دالة للوصول إلى الوقت المتبقي من أي مكان
   int get remainingSeconds => _remainingSeconds;
 
   @override
   Widget build(BuildContext context) {
-    // تمت إزالة Stack نهائياً من هنا - المؤقت لن يظهر تلقائياً في أي شاشة
     return widget.child;
   }
 }
