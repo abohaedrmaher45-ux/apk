@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'daily_movement_screen.dart';
-import '../main.dart';
+import '../main.dart'; // لاستخدام checkTrialStatus و buildTrialTimer
 import '../security/activation_screen.dart';
+import 'package:intl/intl.dart'; // أضف في pubspec.yaml: intl: ^0.18.1
 
 class DateSelectionScreen extends StatefulWidget {
   final String storeType;
@@ -23,26 +24,61 @@ class DateSelectionScreen extends StatefulWidget {
 class _DateSelectionScreenState extends State<DateSelectionScreen> {
   DateTime _selectedDate = DateTime.now();
   bool _timerCheckDone = false;
+  int _remainingSeconds = 0;
+  bool _isTimerExpired = false;
+  bool _navigating = false;
+  Timer? _timer;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkTimerExpired();
-    });
+    _initializeTimer();
   }
 
-  void _checkTimerExpired() {
-    final timerProvider = TrialTimerProvider.of(context);
-    if (timerProvider != null && timerProvider.remainingSeconds <= 0) {
-      _navigateToActivationScreen();
-    }
+  Future<void> _initializeTimer() async {
+    // التحقق من حالة المؤقت
+    final isActive = await checkTrialStatus(context);
+    if (!isActive) return;
+
+    // بدء مراقبة المؤقت
+    _startTimerMonitoring();
+    
     setState(() {
       _timerCheckDone = true;
     });
   }
 
+  void _startTimerMonitoring() {
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) async {
+      if (!mounted || _navigating) return;
+      
+      final remaining = await _getRemainingSeconds();
+      if (mounted) {
+        setState(() {
+          _remainingSeconds = remaining;
+          _isTimerExpired = remaining <= 0;
+        });
+      }
+      
+      if (_isTimerExpired && !_navigating) {
+        _navigateToActivationScreen();
+      }
+    });
+  }
+
+  Future<int> _getRemainingSeconds() async {
+    final prefs = await SharedPreferences.getInstance();
+    final trialEndTime = prefs.getInt('trial_end_time') ?? 0;
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    return (trialEndTime - now).clamp(0, 259200);
+  }
+
   void _navigateToActivationScreen() {
+    if (_navigating || !mounted) return;
+    _navigating = true;
+    
+    _timer?.cancel();
+    
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const ActivationScreen()),
       (route) => false,
@@ -50,14 +86,12 @@ class _DateSelectionScreenState extends State<DateSelectionScreen> {
   }
 
   void _updateDate({int? year, int? month, int? day}) {
-    final currentYear = year ?? _selectedDate.year;
-    final currentMonth = month ?? _selectedDate.month;
-    var currentDay = day ?? _selectedDate.day;
+    final currentYear = year?.clamp(1900, 2100) ?? _selectedDate.year;
+    final currentMonth = month?.clamp(1, 12) ?? _selectedDate.month;
+    var currentDay = day?.clamp(1, 31) ?? _selectedDate.day;
 
     final daysInMonth = DateUtils.getDaysInMonth(currentYear, currentMonth);
-    if (currentDay > daysInMonth) {
-      currentDay = daysInMonth;
-    }
+    currentDay = currentDay.clamp(1, daysInMonth);
 
     setState(() {
       _selectedDate = DateTime(currentYear, currentMonth, currentDay);
@@ -72,22 +106,11 @@ class _DateSelectionScreenState extends State<DateSelectionScreen> {
     bool isMonth = false,
   }) {
     const months = [
-      'يناير',
-      'فبراير',
-      'مارس',
-      'أبريل',
-      'مايو',
-      'يونيو',
-      'يوليو',
-      'أغسطس',
-      'سبتمبر',
-      'أكتوبر',
-      'نوفمبر',
-      'ديسمبر',
+      'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+      'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر',
     ];
 
-    String displayValue =
-        isMonth ? months[currentValue - 1] : currentValue.toString();
+    String displayValue = isMonth ? months[currentValue - 1] : currentValue.toString();
 
     return Flexible(
       child: Column(
@@ -107,6 +130,13 @@ class _DateSelectionScreenState extends State<DateSelectionScreen> {
               color: Colors.white,
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: Colors.grey[300]!),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black12,
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
             child: Column(
               children: [
@@ -115,6 +145,9 @@ class _DateSelectionScreenState extends State<DateSelectionScreen> {
                   onPressed: onIncrement,
                   color: Colors.green[600],
                   iconSize: 24,
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.green[50],
+                  ),
                 ),
                 SizedBox(
                   height: 30,
@@ -135,6 +168,9 @@ class _DateSelectionScreenState extends State<DateSelectionScreen> {
                   onPressed: onDecrement,
                   color: Colors.red[600],
                   iconSize: 24,
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.red[50],
+                  ),
                 ),
               ],
             ),
@@ -144,23 +180,40 @@ class _DateSelectionScreenState extends State<DateSelectionScreen> {
     );
   }
 
+  String _formatTime(int seconds) {
+    final minutes = (seconds ~/ 60).toString().padLeft(2, '0');
+    final secs = (seconds % 60).toString().padLeft(2, '0');
+    return '$minutes:$secs';
+  }
+
+  Future<void> _navigateToDailyMovement() async {
+    // التحقق النهائي من المؤقت
+    final isActive = await checkTrialStatus(context);
+    if (!isActive || _navigating) return;
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => DailyMovementScreen(
+          selectedDate: '${_selectedDate.year}/${_selectedDate.month}/${_selectedDate.day}',
+          storeType: widget.storeType,
+          sellerName: widget.sellerName ?? 'غير معروف',
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final timerProvider = TrialTimerProvider.of(context);
-    final remainingSeconds = timerProvider?.remainingSeconds ?? 0;
-    final bool isTimerExpired = remainingSeconds <= 0;
-
-    // التحقق من انتهاء المؤقت
-    if (isTimerExpired && _timerCheckDone) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _navigateToActivationScreen();
-      });
+    if (!_timerCheckDone) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
     }
 
-    return WillPopScope(
-      onWillPop: () async {
-        SystemNavigator.pop();
-        return false;
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (didPop) {
+        if (!didPop) SystemNavigator.pop();
       },
       child: Scaffold(
         appBar: AppBar(
@@ -174,38 +227,47 @@ class _DateSelectionScreenState extends State<DateSelectionScreen> {
           automaticallyImplyLeading: false,
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
-            onPressed: () {
-              Navigator.of(context).pop();
-            },
+            onPressed: () => Navigator.of(context).pop(),
           ),
-          // ✅ إضافة المؤقت في الـ AppBar
+          // ✅ المؤقت المرئي الجميل
           actions: [
-            if (!isTimerExpired)
+            if (!_isTimerExpired)
               Padding(
                 padding: const EdgeInsets.only(right: 16.0),
-                child: Center(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.white24),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Colors.red.shade600, Colors.orange.shade600],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.timer_outlined, color: Colors.white, size: 18),
-                        const SizedBox(width: 8),
-                        Text(
-                          _formatTime(remainingSeconds),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
+                    borderRadius: BorderRadius.circular(25),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.red.withOpacity(0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.timer, color: Colors.white, size: 18),
+                      const SizedBox(width: 8),
+                      Text(
+                        _formatTime(_remainingSeconds),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          shadows: [
+                            Shadow(offset: Offset(1, 1), blurRadius: 2, color: Colors.black54),
+                          ],
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -215,18 +277,25 @@ class _DateSelectionScreenState extends State<DateSelectionScreen> {
           textDirection: TextDirection.rtl,
           child: Column(
             children: [
-              // التاريخ المحدد
+              // عرض التاريخ الحالي
               Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Align(
-                  alignment: Alignment.topRight,
+                padding: const EdgeInsets.all(16.0),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.teal[50],
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.teal[200]!),
+                  ),
                   child: Text(
-                    '${_selectedDate.year}/${_selectedDate.month}/${_selectedDate.day}',
+                    DateFormat('yyyy/MM/dd').format(_selectedDate),
                     style: const TextStyle(
-                      fontSize: 14,
+                      fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: Colors.black54,
+                      color: Colors.teal,
                     ),
+                    textAlign: TextAlign.center,
                   ),
                 ),
               ),
@@ -261,41 +330,29 @@ class _DateSelectionScreenState extends State<DateSelectionScreen> {
               
               // زر الدخول
               Padding(
-                padding: const EdgeInsets.only(bottom: 16.0),
-                child: Center(
+                padding: const EdgeInsets.all(24.0),
+                child: SizedBox(
+                  width: double.infinity,
                   child: ElevatedButton.icon(
-                    onPressed: !isTimerExpired 
-                      ? () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (context) => DailyMovementScreen(
-                                selectedDate:
-                                    '${_selectedDate.year}/${_selectedDate.month}/${_selectedDate.day}',
-                                storeType: widget.storeType,
-                                sellerName: widget.sellerName ?? 'غير معروف',
-                              ),
-                            ),
-                          );
-                        }
-                      : null, // تعطيل الزر إذا انتهى الوقت
+                    onPressed: !_isTimerExpired ? _navigateToDailyMovement : null,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: !isTimerExpired 
-                        ? Colors.green[600] 
-                        : Colors.grey[400],
+                      backgroundColor: !_isTimerExpired 
+                          ? Colors.green[600] 
+                          : Colors.grey[400],
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 60,
-                        vertical: 18,
-                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 18),
+                      elevation: !_isTimerExpired ? 8 : 0,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(16),
                       ),
-                      elevation: 4,
                     ),
-                    icon: const Icon(Icons.check_circle_outline, size: 24),
+                    icon: const Icon(Icons.login, size: 28),
                     label: Text(
-                      !isTimerExpired ? 'دخــول' : 'انتهت الفترة التجريبية',
-                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                      !_isTimerExpired ? 'دخــول النظام' : 'انتهت الفترة التجريبية',
+                      style: const TextStyle(
+                        fontSize: 20, 
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ),
@@ -307,10 +364,9 @@ class _DateSelectionScreenState extends State<DateSelectionScreen> {
     );
   }
 
-  // ✅ دالة تنسيق الوقت
-  String _formatTime(int seconds) {
-    int minutes = seconds ~/ 60;
-    int secs = seconds % 60;
-    return '${minutes.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
   }
 }
