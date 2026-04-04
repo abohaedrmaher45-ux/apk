@@ -15,27 +15,28 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
   final List<TextEditingController> heightControllers = [];
 
   // قوائم القيم المحسوبة
-  final List<double> volumes = [0.0, 0.0, 0.0];
-  final List<double> totals = [0.0, 0.0, 0.0];
+  final List<double> volumes = [0.0, 0.0, 0.0, 0.0];
+  final List<double> totals = [0.0, 0.0, 0.0, 0.0];
 
-  // أسعار الأنواع (دولار لكل متر مكعب)
-  final List<double> prices = [3.00, 2.70, 2.65];
+  // أسعار الأنواع (دولار لكل متر مكعب) - تم التعديل
+  final List<double> prices = [2.65, 2.70, 3.00, 2.15];
 
-  // أسماء الأنواع
+  // أسماء الأنواع - تمت الإضافة والتعديل
   final List<String> types = [
-    'سوبر اول مميز',
-    'سوفت',
-    'سوبر اول',
+    'سوبر اول مميز',      // السعر: 2.65 دولار (تم التعديل)
+    'سوفت',               // السعر: 2.70 دولار
+    'سوبر ثقيل مميز',     // السعر: 3.00 دولار (جديد)
+    'ممتاز اول مميز',     // السعر: 2.15 دولار (جديد)
   ];
 
   // رسائل الخطأ لكل صف
-  final List<String?> errorMessages = [null, null, null];
+  final List<String?> errorMessages = [null, null, null, null];
 
   @override
   void initState() {
     super.initState();
-    // تهيئة الـ controllers لكل صف
-    for (int i = 0; i < 3; i++) {
+    // تهيئة الـ controllers لكل صف (4 صفوف الآن)
+    for (int i = 0; i < 4; i++) {
       lengthControllers.add(TextEditingController());
       widthControllers.add(TextEditingController());
       heightControllers.add(TextEditingController());
@@ -50,7 +51,7 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
   @override
   void dispose() {
     // تنظيف الـ controllers
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 4; i++) {
       lengthControllers[i].dispose();
       widthControllers[i].dispose();
       heightControllers[i].dispose();
@@ -153,13 +154,20 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
                   DataColumn(label: Text('السعر (\$/م³)', style: TextStyle(fontWeight: FontWeight.bold))),
                   DataColumn(label: Text('الإجمالي (\$)', style: TextStyle(fontWeight: FontWeight.bold))),
                 ],
-                rows: List.generate(3, (index) {
+                rows: List.generate(4, (index) {
+                  // تلوين الصفوف بشكل متناوب
+                  Color? rowColor;
+                  if (index % 2 == 0) {
+                    rowColor = Colors.teal.shade50;
+                  }
+                  
                   return DataRow(
+                    color: MaterialStateProperty.all(rowColor),
                     cells: [
                       // عمود النوع
                       DataCell(
                         Container(
-                          width: 120,
+                          width: 140,
                           child: Text(
                             types[index],
                             style: const TextStyle(fontWeight: FontWeight.w500),
@@ -235,9 +243,9 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
                       // عمود السعر (ثابت)
                       DataCell(
                         Container(
-                          width: 80,
+                          width: 100,
                           child: Text(
-                            '${prices[index].toStringAsFixed(2)}',
+                            '${prices[index].toStringAsFixed(2)} \$',
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                         ),
