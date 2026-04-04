@@ -17,7 +17,7 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace = "sy.shop_depts.syrian_arab"
+    namespace = "sy.alhalmarket.syrian_arab"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -32,7 +32,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "sy.shop_depts.syrian_arab"
+        applicationId = "sy.alhalmarket.syrian_arab"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         
