@@ -27,7 +27,7 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
   
   // متغير سعر الدولار بالليرة السورية
   final TextEditingController dollarPriceController = TextEditingController();
-  double dollarPrice = 0.0;  // تم التعديل: أصبح 0 بدلاً من 15000
+  double dollarPrice = 0.0;
   String? dollarPriceError;
   
   // متغير وحدة القياس
@@ -42,13 +42,14 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
   final List<double> totalsAfterDiscountUSD = [];
   final List<double> totalsSYP = [];
 
-  // أسعار الأنواع الأصلية (دولار لكل متر مكعب)
-  final List<double> defaultPrices = [2.65, 2.70, 3.00, 2.15];
+  // أسعار الأنواع (دولار لكل متر مكعب)
+  final List<double> defaultPrices = [2.85, 2.70, 3.00, 2.15, 2.65];
   final List<String> defaultTypes = [
     'سوبر اول مميز',    // السعر: 2.65 دولار
     'سوفت',             // السعر: 2.70 دولار
     'سوبر ثقيل مميز',   // السعر: 3.00 دولار
     'ممتاز اول مميز',   // السعر: 2.15 دولار
+    'سوبر اول',         // السعر: 2.65 دولار (جديد)
   ];
 
   @override
@@ -63,7 +64,7 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
     for (int i = 0; i < defaultTypes.length; i++) {
       items.add({
         'type': defaultTypes[i],
-        'price': defaultPrices[i],  // الأسعار الأصلية
+        'price': defaultPrices[i],
         'isCustom': false,
       });
       _addControllersForIndex(i);
@@ -93,13 +94,17 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
   void _addNewRow() {
     setState(() {
       items.add({
-        'type': 'نوع جديد',
+        'type': 'نوع جديد',      // اسم مؤقت
         'price': 0.0,
         'isCustom': true,
       });
       _addControllersForIndex(items.length - 1);
     });
     _saveData();
+    // بعد إضافة الصف، نفتح نافذة تعديل الاسم مباشرة
+    Future.delayed(Duration.zero, () {
+      _showEditNameAndPriceDialog(items.length - 1);
+    });
   }
   
   void _removeRow(int index) {
@@ -169,14 +174,11 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
   Future<void> _loadSavedData() async {
     final prefs = await SharedPreferences.getInstance();
     
-    // تحميل سعر الدولار (بدون قيمة افتراضية)
     double savedDollarPrice = prefs.getDouble('dollar_price') ?? 0.0;
     setState(() {
       dollarPrice = savedDollarPrice;
       if (savedDollarPrice > 0) {
         dollarPriceController.text = savedDollarPrice.toString();
-      } else {
-        dollarPriceController.clear(); // ترك الحقل فارغاً
       }
     });
     
@@ -185,7 +187,6 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
       selectedUnit = savedUnit;
     });
     
-    // تحميل عدد الصفوف المخصصة
     int savedItemCount = prefs.getInt('item_count') ?? defaultTypes.length;
     if (savedItemCount > defaultTypes.length) {
       for (int i = defaultTypes.length; i < savedItemCount; i++) {
@@ -202,7 +203,6 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
       }
     }
     
-    // تحميل بيانات الجدول
     for (int i = 0; i < items.length; i++) {
       String? length = prefs.getString('length_$i');
       String? width = prefs.getString('width_$i');
@@ -420,6 +420,52 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
     );
   }
   
+  void _showEditNameAndPriceDialog(int index) {
+    final nameController = TextEditingController(text: items[index]['type']);
+    final priceController = TextEditingController(text: items[index]['price'].toString());
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('تعديل الصنف'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              decoration: const InputDecoration(labelText: 'اسم الصنف', border: OutlineInputBorder()),
+              textAlign: TextAlign.right,
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: priceController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'السعر (\$/م³)', border: OutlineInputBorder()),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+          TextButton(onPressed: () {
+            String newName = nameController.text.trim();
+            if (newName.isNotEmpty) {
+              items[index]['type'] = newName;
+            }
+            double? newPrice = double.tryParse(priceController.text);
+            if (newPrice != null && newPrice > 0) {
+              items[index]['price'] = newPrice;
+            }
+            setState(() {});
+            calculateForRow(index);
+            _saveData();
+            Navigator.pop(context);
+            _showSnackBar('تم تحديث البيانات', Colors.green);
+          }, child: const Text('حفظ')),
+        ],
+      ),
+    );
+  }
+  
   Future<void> _sharePDF() async {
     if (getGrandTotalAfterDiscountUSD() == 0) {
       _showSnackBar('لا توجد بيانات للمشاركة', Colors.orange);
@@ -521,7 +567,6 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
       ),
       body: Column(
         children: [
-          // معلومات أعلى الصفحة
           Container(
             margin: const EdgeInsets.all(12),
             padding: const EdgeInsets.all(12),
@@ -582,7 +627,6 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
             ),
           ),
           
-          // الجدول
           Expanded(
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
@@ -615,7 +659,7 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
                             width: 120,
                             child: Row(children: [
                               Expanded(child: Text(items[index]['type'], style: const TextStyle(fontSize: 12))),
-                              IconButton(icon: const Icon(Icons.edit, size: 16), onPressed: () => _showEditPriceDialog(index)),
+                              IconButton(icon: const Icon(Icons.edit, size: 16), onPressed: () => _showEditNameAndPriceDialog(index)),
                             ]),
                           )),
                           DataCell(SizedBox(width: 70, child: TextField(controller: lengthControllers[index], keyboardType: TextInputType.number, decoration: _inputDecoration()))),
@@ -668,33 +712,6 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
             ],
           ],
         ),
-      ),
-    );
-  }
-  
-  void _showEditPriceDialog(int index) {
-    final controller = TextEditingController(text: items[index]['price'].toString());
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('تعديل سعر ${items[index]['type']}'),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(labelText: 'السعر (\$/م³)', border: OutlineInputBorder()),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
-          TextButton(onPressed: () {
-            double? newPrice = double.tryParse(controller.text);
-            if (newPrice != null && newPrice > 0) {
-              setState(() { items[index]['price'] = newPrice; });
-              calculateForRow(index);
-              _saveData();
-            }
-            Navigator.pop(context);
-          }, child: const Text('حفظ')),
-        ],
       ),
     );
   }
