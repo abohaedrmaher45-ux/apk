@@ -11,11 +11,6 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  # ... الحزم الموجودة ...
-  intl: ^0.19.0  # لتنسيق الأرقام
-  share_plus: ^7.1.0  # للمشاركة
-  pdf: ^3.10.4  # لإنشاء PDF
-  path_provider: ^2.1.5  # لحفظ الملفات
   
   flutter_secure_storage: ^9.2.2
   shared_preferences: ^2.5.3
@@ -23,10 +18,18 @@ dependencies:
   http: ^1.2.2
   cupertino_icons: ^1.0.8
   provider: ^6.1.5+1
+  
+  # Date handling (مرة واحدة فقط)
   intl: ^0.19.0
+  
+  # Local storage
   path_provider: ^2.1.5
+  
+  # PDF & Sharing
   pdf: ^3.10.4
   share_plus: ^7.1.0
+  
+  # ZIP & File
   archive: ^3.4.10
   file_picker: ^8.0.3
 
@@ -37,5 +40,3 @@ dev_dependencies:
   
 flutter:
   uses-material-design: true
-  assets:
-    - assets/fonts/Cairo-Regular.ttf
