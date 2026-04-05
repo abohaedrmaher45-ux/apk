@@ -27,7 +27,7 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
   
   // متغير سعر الدولار بالليرة السورية
   final TextEditingController dollarPriceController = TextEditingController();
-  double dollarPrice = 15000.0;
+  double dollarPrice = 0.0;  // تم التعديل: أصبح 0 بدلاً من 15000
   String? dollarPriceError;
   
   // متغير وحدة القياس
@@ -42,13 +42,13 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
   final List<double> totalsAfterDiscountUSD = [];
   final List<double> totalsSYP = [];
 
-  // أسعار الأنواع الافتراضية
+  // أسعار الأنواع الأصلية (دولار لكل متر مكعب)
   final List<double> defaultPrices = [2.65, 2.70, 3.00, 2.15];
   final List<String> defaultTypes = [
-    'سوبر اول مميز',
-    'سوفت',
-    'سوبر ثقيل مميز',
-    'ممتاز اول مميز',
+    'سوبر اول مميز',    // السعر: 2.65 دولار
+    'سوفت',             // السعر: 2.70 دولار
+    'سوبر ثقيل مميز',   // السعر: 3.00 دولار
+    'ممتاز اول مميز',   // السعر: 2.15 دولار
   ];
 
   @override
@@ -63,7 +63,7 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
     for (int i = 0; i < defaultTypes.length; i++) {
       items.add({
         'type': defaultTypes[i],
-        'price': defaultPrices[i],
+        'price': defaultPrices[i],  // الأسعار الأصلية
         'isCustom': false,
       });
       _addControllersForIndex(i);
@@ -113,14 +113,12 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
       message: 'هل أنت متأكد من حذف صف "${items[index]['type']}"؟',
       onConfirm: () {
         setState(() {
-          // تنظيف الـ controllers
           lengthControllers[index].dispose();
           widthControllers[index].dispose();
           heightControllers[index].dispose();
           quantityControllers[index].dispose();
           discountControllers[index].dispose();
           
-          // إزالة من القوائم
           lengthControllers.removeAt(index);
           widthControllers.removeAt(index);
           heightControllers.removeAt(index);
@@ -171,10 +169,15 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
   Future<void> _loadSavedData() async {
     final prefs = await SharedPreferences.getInstance();
     
-    double savedDollarPrice = prefs.getDouble('dollar_price') ?? 15000.0;
+    // تحميل سعر الدولار (بدون قيمة افتراضية)
+    double savedDollarPrice = prefs.getDouble('dollar_price') ?? 0.0;
     setState(() {
       dollarPrice = savedDollarPrice;
-      dollarPriceController.text = savedDollarPrice.toString();
+      if (savedDollarPrice > 0) {
+        dollarPriceController.text = savedDollarPrice.toString();
+      } else {
+        dollarPriceController.clear(); // ترك الحقل فارغاً
+      }
     });
     
     String savedUnit = prefs.getString('unit') ?? 'cm';
@@ -310,7 +313,6 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
     double price = items[index]['price'];
     double totalBeforeDiscountUSD = quantity * volumeM3 * price;
     
-    // تطبيق الخصم
     double discountAmount = totalBeforeDiscountUSD * (discountPercent / 100);
     double totalAfterDiscountUSD = totalBeforeDiscountUSD - discountAmount;
     
@@ -433,7 +435,7 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
             pw.Header(level: 0, child: pw.Text('فاتورة محاسبة', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold))),
             pw.SizedBox(height: 10),
             pw.Text('التاريخ: $currentDate', style: pw.TextStyle(fontSize: 12)),
-            pw.Text('سعر الدولار: ${_formatNumber(dollarPrice)} ل.س', style: pw.TextStyle(fontSize: 12)),
+            pw.Text('سعر الدولار: ${dollarPrice > 0 ? _formatNumber(dollarPrice) : "لم يتم إدخاله"} ل.س', style: pw.TextStyle(fontSize: 12)),
             pw.SizedBox(height: 20),
             pw.Table(
               border: pw.TableBorder.all(),
@@ -470,10 +472,11 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
               pw.Text('الإجمالي بعد الخصم:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
               pw.Text('${_formatNumber(getGrandTotalAfterDiscountUSD())} \$'),
             ]),
-            pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-              pw.Text('الإجمالي بالليرة:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-              pw.Text('${_formatNumber(getGrandTotalSYP())} ل.س'),
-            ]),
+            if (dollarPrice > 0)
+              pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+                pw.Text('الإجمالي بالليرة:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                pw.Text('${_formatNumber(getGrandTotalSYP())} ل.س'),
+              ]),
           ],
         ),
       );
@@ -550,12 +553,30 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
                     child: TextField(
                       controller: dollarPriceController,
                       keyboardType: TextInputType.number,
-                      decoration: InputDecoration(labelText: 'سعر الدولار (ل.س)', border: const OutlineInputBorder(), isDense: true, errorText: dollarPriceError),
+                      onChanged: (_) => updateSYPCalculations(),
+                      decoration: InputDecoration(
+                        labelText: 'سعر الدولار (ل.س)',
+                        hintText: 'مثال: 15000',
+                        border: const OutlineInputBorder(),
+                        isDense: true,
+                        errorText: dollarPriceError,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), decoration: BoxDecoration(color: Colors.blue, borderRadius: BorderRadius.circular(8)),
-                    child: Column(children: [const Text('السعر', style: TextStyle(color: Colors.white, fontSize: 10)), Text('${_formatNumber(dollarPrice)}', style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold))])),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(color: Colors.blue, borderRadius: BorderRadius.circular(8)),
+                    child: Column(
+                      children: [
+                        const Text('السعر', style: TextStyle(color: Colors.white, fontSize: 10)),
+                        Text(
+                          dollarPrice > 0 ? '${_formatNumber(dollarPrice)} ل.س' : 'لم يدخل',
+                          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ),
                 ]),
               ],
             ),
@@ -580,6 +601,7 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
                       const DataColumn(label: Text('العدد', style: TextStyle(fontWeight: FontWeight.bold))),
                       const DataColumn(label: Text('الحجم (م³)', style: TextStyle(fontWeight: FontWeight.bold))),
                       const DataColumn(label: Text('الخصم %', style: TextStyle(fontWeight: FontWeight.bold))),
+                      const DataColumn(label: Text('السعر (\$/م³)', style: TextStyle(fontWeight: FontWeight.bold))),
                       const DataColumn(label: Text('الإجمالي (\$)', style: TextStyle(fontWeight: FontWeight.bold))),
                       const DataColumn(label: Text('الإجمالي (ل.س)', style: TextStyle(fontWeight: FontWeight.bold))),
                       const DataColumn(label: Text('', style: TextStyle(fontWeight: FontWeight.bold))),
@@ -589,22 +611,12 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
                       return DataRow(
                         color: rowColor != null ? WidgetStateProperty.all(rowColor) : null,
                         cells: [
-                          // عمود النوع مع إمكانية التعديل
                           DataCell(SizedBox(
                             width: 120,
-                            child: items[index]['isCustom'] == true
-                                ? Row(children: [
-                                    Expanded(child: TextField(
-                                      controller: TextEditingController(text: items[index]['type']),
-                                      onChanged: (value) { items[index]['type'] = value; _saveData(); },
-                                      decoration: _inputDecoration(),
-                                    )),
-                                    IconButton(icon: const Icon(Icons.edit, size: 16), onPressed: () => _showEditPriceDialog(index)),
-                                  ])
-                                : Row(children: [
-                                    Expanded(child: Text(items[index]['type'], style: const TextStyle(fontSize: 12))),
-                                    IconButton(icon: const Icon(Icons.edit, size: 16), onPressed: () => _showEditPriceDialog(index)),
-                                  ]),
+                            child: Row(children: [
+                              Expanded(child: Text(items[index]['type'], style: const TextStyle(fontSize: 12))),
+                              IconButton(icon: const Icon(Icons.edit, size: 16), onPressed: () => _showEditPriceDialog(index)),
+                            ]),
                           )),
                           DataCell(SizedBox(width: 70, child: TextField(controller: lengthControllers[index], keyboardType: TextInputType.number, decoration: _inputDecoration()))),
                           DataCell(SizedBox(width: 70, child: TextField(controller: widthControllers[index], keyboardType: TextInputType.number, decoration: _inputDecoration()))),
@@ -612,6 +624,7 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
                           DataCell(SizedBox(width: 60, child: TextField(controller: quantityControllers[index], keyboardType: TextInputType.number, decoration: _inputDecoration(hint: '1')))),
                           DataCell(Container(width: 70, child: Text(volumes[index].toStringAsFixed(4), style: const TextStyle(color: Colors.teal, fontWeight: FontWeight.bold)))),
                           DataCell(SizedBox(width: 60, child: TextField(controller: discountControllers[index], keyboardType: TextInputType.number, decoration: _inputDecoration(hint: '0')))),
+                          DataCell(Container(width: 70, child: Text('${items[index]['price']}', style: const TextStyle(fontWeight: FontWeight.bold)))),
                           DataCell(Container(width: 80, child: Text(_formatNumber(totalsAfterDiscountUSD[index]), style: TextStyle(color: Colors.green.shade700, fontWeight: FontWeight.bold)))),
                           DataCell(Container(width: 100, child: Text(_formatNumber(totalsSYP[index]), style: TextStyle(color: Colors.blue.shade700, fontWeight: FontWeight.bold)))),
                           DataCell(IconButton(icon: const Icon(Icons.delete, color: Colors.red, size: 20), onPressed: () => _removeRow(index))),
@@ -644,13 +657,15 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
               const Text('الإجمالي بعد الخصم:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal)),
               Text('\$${_formatNumber(getGrandTotalAfterDiscountUSD())}', style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 16)),
             ]),
-            const SizedBox(height: 8),
-            Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.blue, borderRadius: BorderRadius.circular(12)),
-              child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                const Text('الإجمالي النهائي بالليرة:', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                Text('${_formatNumber(getGrandTotalSYP())} ل.س', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
-              ]),
-            ),
+            if (dollarPrice > 0) ...[
+              const SizedBox(height: 8),
+              Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.blue, borderRadius: BorderRadius.circular(12)),
+                child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                  const Text('الإجمالي النهائي بالليرة:', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  Text('${_formatNumber(getGrandTotalSYP())} ل.س', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+                ]),
+              ),
+            ],
           ],
         ),
       ),
