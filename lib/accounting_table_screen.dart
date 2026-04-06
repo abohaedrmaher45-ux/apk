@@ -249,7 +249,7 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
     double height = double.tryParse(col.heightCMController.text) ?? 0;
     if (height <= 0) return 0;
     double volumeCM = col.lengthCM * col.widthCM * height;
-    return volumeCM / 20000; // القسمة على 20000
+    return volumeCM / 20000;
   }
   
   double calculateTotalUSD(ColumnData col) {
@@ -355,7 +355,7 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
       pdf.addPage(
         pw.MultiPage(
           build: (context) => [
-            pw.Header(level: 0, child: pw.Text('قسم الفرشات - فاتورة', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold))),
+            pw.Header(level: 0, child: pw.Text('صفحة المحاسبة - فاتورة', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold))),
             pw.SizedBox(height: 10),
             pw.Text('التاريخ: $currentDate', style: pw.TextStyle(fontSize: 12)),
             pw.Text('نوع الإسفنج: ${selectedSpongeType.name} (${selectedSpongeType.price} \$/م³)', style: pw.TextStyle(fontSize: 12)),
@@ -404,10 +404,10 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
       );
       
       final output = await getTemporaryDirectory();
-      final file = File('${output.path}/mattress_invoice.pdf');
+      final file = File('${output.path}/invoice.pdf');
       await file.writeAsBytes(await pdf.save());
       
-      await Share.shareXFiles([XFile(file.path)], text: 'فاتورة قسم الفرشات - $currentDate');
+      await Share.shareXFiles([XFile(file.path)], text: 'فاتورة المحاسبة - $currentDate');
       _showSnackBar('تم مشاركة الفاتورة بنجاح', Colors.green);
     } catch (e) {
       _showSnackBar('حدث خطأ: $e', Colors.red);
@@ -432,7 +432,7 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('قسم الفرشات', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('صفحة المحاسبة', style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
         centerTitle: true,
@@ -442,122 +442,119 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
           IconButton(icon: const Icon(Icons.share), onPressed: _sharePDF, tooltip: 'مشاركة الفاتورة'),
         ],
       ),
-      body: Directionality(
-        textDirection: TextDirection.rtl,
-        child: Column(
-          children: [
-            // معلومات أعلى الصفحة
-            Container(
-              margin: const EdgeInsets.all(12),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(12)),
-              child: Column(
-                children: [
-                  Row(children: [
-                    Expanded(child: Text('📅 $currentDate', style: const TextStyle(fontSize: 12))),
-                  ]),
-                  const SizedBox(height: 8),
-                  // قائمة أنواع الإسفنج
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.teal),
-                    ),
-                    child: DropdownButton<SpongeType>(
-                      value: selectedSpongeType,
-                      isExpanded: true,
-                      icon: const Icon(Icons.arrow_drop_down),
-                      underline: const SizedBox(),
-                      onChanged: (SpongeType? newValue) {
-                        if (newValue != null) {
-                          setState(() {
-                            selectedSpongeType = newValue;
-                          });
-                          _saveData();
-                          updateAllCalculations();
-                        }
+      body: Column(
+        children: [
+          // معلومات أعلى الصفحة
+          Container(
+            margin: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(12)),
+            child: Column(
+              children: [
+                Row(children: [
+                  Expanded(child: Text('📅 $currentDate', style: const TextStyle(fontSize: 12))),
+                ]),
+                const SizedBox(height: 8),
+                // قائمة أنواع الإسفنج
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.teal),
+                  ),
+                  child: DropdownButton<SpongeType>(
+                    value: selectedSpongeType,
+                    isExpanded: true,
+                    icon: const Icon(Icons.arrow_drop_down),
+                    underline: const SizedBox(),
+                    onChanged: (SpongeType? newValue) {
+                      if (newValue != null) {
+                        setState(() {
+                          selectedSpongeType = newValue;
+                        });
+                        _saveData();
+                        updateAllCalculations();
+                      }
+                    },
+                    items: spongeTypes.map((type) {
+                      return DropdownMenuItem(
+                        value: type,
+                        child: Text('${type.name} - ${type.price} \$/م³'),
+                      );
+                    }).toList(),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // سعر الدولار
+                Row(children: [
+                  Expanded(
+                    child: TextField(
+                      controller: dollarPriceController,
+                      keyboardType: TextInputType.number,
+                      onChanged: (_) {
+                        double? price = double.tryParse(dollarPriceController.text);
+                        setState(() {
+                          if (price != null && price > 0) {
+                            dollarPrice = price;
+                            dollarPriceError = null;
+                          } else {
+                            dollarPrice = 0;
+                            dollarPriceError = 'الرجاء إدخال سعر صحيح';
+                          }
+                        });
+                        _saveData();
+                        updateAllCalculations();
                       },
-                      items: spongeTypes.map((type) {
-                        return DropdownMenuItem(
-                          value: type,
-                          child: Text('${type.name} - ${type.price} \$/م³'),
-                        );
-                      }).toList(),
+                      decoration: InputDecoration(
+                        labelText: 'سعر الدولار (ل.س)',
+                        hintText: 'مثال: 15000',
+                        border: const OutlineInputBorder(),
+                        isDense: true,
+                        errorText: dollarPriceError,
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  // سعر الدولار
-                  Row(children: [
-                    Expanded(
-                      child: TextField(
-                        controller: dollarPriceController,
-                        keyboardType: TextInputType.number,
-                        onChanged: (_) {
-                          double? price = double.tryParse(dollarPriceController.text);
-                          setState(() {
-                            if (price != null && price > 0) {
-                              dollarPrice = price;
-                              dollarPriceError = null;
-                            } else {
-                              dollarPrice = 0;
-                              dollarPriceError = 'الرجاء إدخال سعر صحيح';
-                            }
-                          });
-                          _saveData();
-                          updateAllCalculations();
-                        },
-                        decoration: InputDecoration(
-                          labelText: 'سعر الدولار (ل.س)',
-                          hintText: 'مثال: 15000',
-                          border: const OutlineInputBorder(),
-                          isDense: true,
-                          errorText: dollarPriceError,
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(color: Colors.blue, borderRadius: BorderRadius.circular(8)),
+                    child: Column(
+                      children: [
+                        const Text('السعر', style: TextStyle(color: Colors.white, fontSize: 10)),
+                        Text(
+                          dollarPrice > 0 ? '${_formatNumber(dollarPrice)} ل.س' : 'لم يدخل',
+                          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
                         ),
-                      ),
+                      ],
                     ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(color: Colors.blue, borderRadius: BorderRadius.circular(8)),
-                      child: Column(
-                        children: [
-                          const Text('السعر', style: TextStyle(color: Colors.white, fontSize: 10)),
-                          Text(
-                            dollarPrice > 0 ? '${_formatNumber(dollarPrice)} ل.س' : 'لم يدخل',
-                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ]),
-                ],
-              ),
+                  ),
+                ]),
+              ],
             ),
-            
-            // الجدول - الأعمدة
-            Expanded(
+          ),
+          
+          // الجدول - الأعمدة
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
               child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.vertical,
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: columns.asMap().entries.map((entry) {
-                        int index = entry.key;
-                        ColumnData col = entry.value;
-                        return _buildColumnCard(index, col);
-                      }).toList(),
-                    ),
+                scrollDirection: Axis.vertical,
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: columns.asMap().entries.map((entry) {
+                      int index = entry.key;
+                      ColumnData col = entry.value;
+                      return _buildColumnCard(index, col);
+                    }).toList(),
                   ),
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
       bottomNavigationBar: Container(
         color: Colors.teal.shade50,
