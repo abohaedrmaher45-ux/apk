@@ -7,6 +7,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:path_provider/path_provider.dart';
 import 'package:intl/intl.dart';
 import 'support_screen.dart';
+import 'final_invoice_screen.dart';
 
 class AccountingTableScreen extends StatefulWidget {
   const AccountingTableScreen({super.key});
@@ -43,7 +44,7 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
   void _initializeSpongeTypes() {
     if (spongeTypes.isEmpty) {
       spongeTypes = [
-        SpongeType(name: 'سوبر اول مميز', price: 2.65),
+        SpongeType(name: 'سوبر اول مميز', price: 2.85),
         SpongeType(name: 'سوفت', price: 2.70),
         SpongeType(name: 'سوبر ثقيل مميز', price: 3.00),
         SpongeType(name: 'ممتاز اول مميز', price: 2.15),
@@ -311,7 +312,7 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
   Future<void> _saveSpongeTypes() async {
     final prefs = await SharedPreferences.getInstance();
     List<String> names = [];
-    List<String> prices = []; // تخزين كـ String بدلاً من Double
+    List<String> prices = [];
     for (var type in spongeTypes) {
       names.add(type.name);
       prices.add(type.price.toString());
@@ -443,6 +444,43 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
     }
     return sum;
   }
+  
+  // ==================== دوال لجلب البيانات للفاتورة ====================
+  
+  List<InvoiceItem> getInvoiceItems() {
+    List<InvoiceItem> items = [];
+    for (var col in columns) {
+      double height = double.tryParse(col.heightCMController.text) ?? 0;
+      double quantity = double.tryParse(col.quantityController.text) ?? 1;
+      double discount = double.tryParse(col.discountController.text) ?? 0;
+      double totalUSD = calculateTotalUSD(col);
+      double totalSYP = calculateTotalSYP(col);
+      
+      if (height > 0 && totalUSD > 0) {
+        items.add(InvoiceItem(
+          section: 'الفرشات',
+          type: selectedSpongeType?.name ?? '',
+          dimensions: '${col.lengthCM} × ${col.widthCM}',
+          height: height,
+          quantity: quantity,
+          discount: discount,
+          totalUSD: totalUSD,
+          totalSYP: totalSYP,
+        ));
+      }
+    }
+    return items;
+  }
+  
+  String getCurrentSpongeType() {
+    return selectedSpongeType?.name ?? '';
+  }
+  
+  double getCurrentDollarPrice() {
+    return dollarPrice;
+  }
+  
+  // ==================== نهاية دوال الفاتورة ====================
   
   String _formatNumber(double number) {
     if (number == 0) return '0';
@@ -770,7 +808,7 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
         border: Border.all(color: Colors.teal.shade200),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withValues(alpha: 0.1), // تم الإصلاح
+            color: Colors.grey.withValues(alpha: 0.1),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),

@@ -2,37 +2,21 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'accounting_table_screen.dart';
+import 'support_screen.dart';
+import 'final_invoice_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  final prefs = await SharedPreferences.getInstance();
-  final String activationStatus = prefs.getString('activation_status') ?? '';
-
-  bool isActivated = false;
-  if (activationStatus.isNotEmpty) {
-    try {
-      final decodedStatus = utf8.decode(base64.decode(activationStatus));
-      if (decodedStatus == 'activated_ok') {
-        isActivated = true;
-      }
-    } catch (e) {
-      isActivated = false;
-    }
-  }
-
-  runApp(MyApp(isActivated: isActivated));
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
-  final bool isActivated;
-
-  const MyApp({super.key, required this.isActivated});
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Worker Payments - محاسبة العمال',
+      title: 'ابو ماهر',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
@@ -42,15 +26,11 @@ class MyApp extends StatelessWidget {
         useMaterial3: true,
         fontFamily: 'Arial',
       ),
-      routes: {
-        '/accounting': (context) => const AccountingTableScreen(),
-      },
       home: const WelcomeScreen(),
     );
   }
 }
 
-// ==================== شاشة الترحيب ====================
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
 
@@ -67,10 +47,11 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
   void _navigateToNextScreen() async {
     await Future.delayed(const Duration(seconds: 3));
-    
-    // الانتقال مباشرة إلى شاشة المحاسبة
     if (mounted) {
-      Navigator.pushReplacementNamed(context, '/accounting');
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const AccountingTableScreen()),
+      );
     }
   }
 
@@ -95,7 +76,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // أيقونة أو شعار
               Container(
                 width: 100,
                 height: 100,
@@ -117,8 +97,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                 ),
               ),
               const SizedBox(height: 40),
-              
-              // نص الترحيب الرئيسي
               Container(
                 margin: const EdgeInsets.symmetric(horizontal: 30),
                 padding: const EdgeInsets.all(24),
@@ -177,10 +155,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                   ],
                 ),
               ),
-              
               const SizedBox(height: 50),
-              
-              // مؤشر التحميل
               CircularProgressIndicator(
                 valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                 strokeWidth: 3,

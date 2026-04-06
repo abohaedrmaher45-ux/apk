@@ -1,4 +1,5 @@
 // lib/support_screen.dart
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -7,6 +8,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:path_provider/path_provider.dart';
 import 'package:intl/intl.dart';
 import 'accounting_table_screen.dart';
+import 'final_invoice_screen.dart';
 
 class SupportScreen extends StatefulWidget {
   const SupportScreen({super.key});
@@ -445,6 +447,65 @@ class _SupportScreenState extends State<SupportScreen> {
     return sum;
   }
   
+  List<InvoiceItem> getInvoiceItems() {
+    List<InvoiceItem> items = [];
+    for (var col in columns) {
+      double height = double.tryParse(col.heightController.text) ?? 0;
+      double quantity = double.tryParse(col.quantityController.text) ?? 1;
+      double discount = double.tryParse(col.discountController.text) ?? 0;
+      double totalUSD = calculateTotalUSD(col);
+      double totalSYP = calculateTotalSYP(col);
+      
+      if (height > 0 && totalUSD > 0) {
+        items.add(InvoiceItem(
+          section: 'المساند',
+          type: selectedSupportType?.name ?? '',
+          dimensions: '${col.lengthCM} × ${col.thicknessCM}',
+          height: height,
+          quantity: quantity,
+          discount: discount,
+          totalUSD: totalUSD,
+          totalSYP: totalSYP,
+        ));
+      }
+    }
+    return items;
+  }
+  
+  String getCurrentSupportType() {
+    return selectedSupportType?.name ?? '';
+  }
+  
+  double getCurrentDollarPrice() {
+    return dollarPrice;
+  }
+  
+  void _showFinalInvoice() async {
+    final prefs = await SharedPreferences.getInstance();
+    
+    List<String> supportItemsJson = [];
+    for (var item in getInvoiceItems()) {
+      supportItemsJson.add(jsonEncode({
+        'section': item.section,
+        'type': item.type,
+        'dimensions': item.dimensions,
+        'height': item.height,
+        'quantity': item.quantity,
+        'discount': item.discount,
+        'totalUSD': item.totalUSD,
+        'totalSYP': item.totalSYP,
+      }));
+    }
+    await prefs.setStringList('temp_support_items', supportItemsJson);
+    await prefs.setDouble('temp_support_dollar_price', dollarPrice);
+    await prefs.setString('temp_support_type', getCurrentSupportType());
+    
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const FinalInvoiceScreen()),
+    );
+  }
+  
   String _formatNumber(double number) {
     if (number == 0) return '0';
     final formatter = NumberFormat.decimalPattern('ar');
@@ -755,6 +816,18 @@ class _SupportScreenState extends State<SupportScreen> {
                 ]),
               ),
             ],
+            const SizedBox(height: 8),
+            ElevatedButton.icon(
+              onPressed: _showFinalInvoice,
+              icon: const Icon(Icons.receipt),
+              label: const Text('عرض الفاتورة النهائية', style: TextStyle(fontSize: 16)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.purple,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
           ],
         ),
       ),
@@ -771,7 +844,7 @@ class _SupportScreenState extends State<SupportScreen> {
         border: Border.all(color: Colors.orange.shade200),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withValues(alpha: 0.1), // تم الإصلاح
+            color: Colors.grey.withValues(alpha: 0.1),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
