@@ -15,152 +15,182 @@ class AccountingTableScreen extends StatefulWidget {
 }
 
 class _AccountingTableScreenState extends State<AccountingTableScreen> {
-  // قوائم التحكم لكل صف
-  final List<TextEditingController> lengthControllers = [];
-  final List<TextEditingController> widthControllers = [];
-  final List<TextEditingController> heightControllers = [];
-  final List<TextEditingController> quantityControllers = [];
-  final List<TextEditingController> discountControllers = [];
+  // قائمة الأعمدة
+  final List<ColumnData> columns = [];
   
-  // قائمة أنواع المواد (قابلة للتعديل)
-  final List<Map<String, dynamic>> items = [];
+  // الأعمدة الثابتة الأساسية
+  final List<FixedColumn> fixedColumns = [
+    FixedColumn(name: 'العمود 1', lengthCM: 200, widthCM: 70),
+    FixedColumn(name: 'العمود 2', lengthCM: 180, widthCM: 70),
+    FixedColumn(name: 'العمود 3', lengthCM: 100, widthCM: 100),
+  ];
   
-  // متغير سعر الدولار بالليرة السورية
+  // أنواع الإسفنج
+  final List<SpongeType> spongeTypes = [
+    SpongeType(name: 'سوبر اول مميز', price: 2.65),
+    SpongeType(name: 'سوفت', price: 2.70),
+    SpongeType(name: 'سوبر ثقيل مميز', price: 3.00),
+    SpongeType(name: 'ممتاز اول مميز', price: 2.15),
+    SpongeType(name: 'سوبر اول', price: 2.65),
+  ];
+  
+  // النوع المختار
+  SpongeType selectedSpongeType = SpongeType(name: 'سوبر اول مميز', price: 2.65);
+  
+  // سعر الدولار
   final TextEditingController dollarPriceController = TextEditingController();
   double dollarPrice = 0.0;
   String? dollarPriceError;
   
-  // متغير وحدة القياس
-  String selectedUnit = 'cm';
-  
   // تاريخ اليوم
   String currentDate = '';
   
-  // قوائم القيم المحسوبة
-  final List<double> volumes = [];
-  final List<double> totalsBeforeDiscountUSD = [];
-  final List<double> totalsAfterDiscountUSD = [];
-  final List<double> totalsSYP = [];
-
-  // أسعار الأنواع (دولار لكل متر مكعب)
-  final List<double> defaultPrices = [2.85, 2.70, 3.00, 2.15, 2.65];
-  final List<String> defaultTypes = [
-    'سوبر اول مميز',    // السعر: 2.65 دولار
-    'سوفت',             // السعر: 2.70 دولار
-    'سوبر ثقيل مميز',   // السعر: 3.00 دولار
-    'ممتاز اول مميز',   // السعر: 2.15 دولار
-    'سوبر اول',         // السعر: 2.65 دولار (جديد)
-  ];
-
   @override
   void initState() {
     super.initState();
     _loadSavedData();
     _updateDate();
-    _initializeItems();
+    _initializeColumns();
   }
   
-  void _initializeItems() {
-    for (int i = 0; i < defaultTypes.length; i++) {
-      items.add({
-        'type': defaultTypes[i],
-        'price': defaultPrices[i],
-        'isCustom': false,
-      });
-      _addControllersForIndex(i);
-    }
-  }
-  
-  void _addControllersForIndex(int index) {
-    while (lengthControllers.length <= index) {
-      lengthControllers.add(TextEditingController());
-      widthControllers.add(TextEditingController());
-      heightControllers.add(TextEditingController());
-      quantityControllers.add(TextEditingController());
-      discountControllers.add(TextEditingController());
-      volumes.add(0.0);
-      totalsBeforeDiscountUSD.add(0.0);
-      totalsAfterDiscountUSD.add(0.0);
-      totalsSYP.add(0.0);
+  void _initializeColumns() {
+    // إضافة الأعمدة الثابتة
+    for (var fixed in fixedColumns) {
+      columns.add(ColumnData(
+        name: fixed.name,
+        lengthCM: fixed.lengthCM,
+        widthCM: fixed.widthCM,
+        heightCMController: TextEditingController(),
+        quantityController: TextEditingController(),
+        discountController: TextEditingController(),
+        isFixed: true,
+      ));
     }
     
-    lengthControllers[index].addListener(() => calculateForRow(index));
-    widthControllers[index].addListener(() => calculateForRow(index));
-    heightControllers[index].addListener(() => calculateForRow(index));
-    quantityControllers[index].addListener(() => calculateForRow(index));
-    discountControllers[index].addListener(() => calculateForRow(index));
+    // تحميل الأعمدة الإضافية المحفوظة
+    _loadCustomColumns();
   }
   
-  void _addNewRow() {
+  void _loadCustomColumns() async {
+    final prefs = await SharedPreferences.getInstance();
+    int customCount = prefs.getInt('custom_columns_count') ?? 0;
+    
+    for (int i = 0; i < customCount; i++) {
+      String? name = prefs.getString('custom_column_name_$i');
+      double? length = prefs.getDouble('custom_column_length_$i');
+      double? width = prefs.getDouble('custom_column_width_$i');
+      
+      if (name != null && length != null && width != null) {
+        columns.add(ColumnData(
+          name: name,
+          lengthCM: length,
+          widthCM: width,
+          heightCMController: TextEditingController(),
+          quantityController: TextEditingController(),
+          discountController: TextEditingController(),
+          isFixed: false,
+        ));
+        
+        // تحميل القيم المدخلة
+        String? height = prefs.getString('custom_column_height_$i');
+        String? quantity = prefs.getString('custom_column_quantity_$i');
+        String? discount = prefs.getString('custom_column_discount_$i');
+        
+        if (height != null) columns.last.heightCMController.text = height;
+        if (quantity != null) columns.last.quantityController.text = quantity;
+        if (discount != null) columns.last.discountController.text = discount;
+      }
+    }
+  }
+  
+  void _addCustomColumn() {
     setState(() {
-      items.add({
-        'type': 'نوع جديد',      // اسم مؤقت
-        'price': 0.0,
-        'isCustom': true,
-      });
-      _addControllersForIndex(items.length - 1);
+      columns.add(ColumnData(
+        name: 'عمود جديد',
+        lengthCM: 100,
+        widthCM: 100,
+        heightCMController: TextEditingController(),
+        quantityController: TextEditingController(),
+        discountController: TextEditingController(),
+        isFixed: false,
+      ));
     });
-    _saveData();
-    // بعد إضافة الصف، نفتح نافذة تعديل الاسم مباشرة
+    _saveCustomColumns();
+    // فتح نافذة تعديل الاسم والأبعاد
     Future.delayed(Duration.zero, () {
-      _showEditNameAndPriceDialog(items.length - 1);
+      _showEditColumnDialog(columns.length - 1);
     });
   }
   
-  void _removeRow(int index) {
-    if (items.length <= 1) {
-      _showSnackBar('لا يمكن حذف الصف الأخير', Colors.orange);
+  void _removeColumn(int index) {
+    if (columns[index].isFixed) {
+      _showSnackBar('لا يمكن حذف عمود ثابت', Colors.orange);
       return;
     }
     
     _showConfirmDialog(
-      title: 'حذف الصف',
-      message: 'هل أنت متأكد من حذف صف "${items[index]['type']}"؟',
+      title: 'حذف العمود',
+      message: 'هل أنت متأكد من حذف "${columns[index].name}"؟',
       onConfirm: () {
         setState(() {
-          lengthControllers[index].dispose();
-          widthControllers[index].dispose();
-          heightControllers[index].dispose();
-          quantityControllers[index].dispose();
-          discountControllers[index].dispose();
-          
-          lengthControllers.removeAt(index);
-          widthControllers.removeAt(index);
-          heightControllers.removeAt(index);
-          quantityControllers.removeAt(index);
-          discountControllers.removeAt(index);
-          items.removeAt(index);
-          volumes.removeAt(index);
-          totalsBeforeDiscountUSD.removeAt(index);
-          totalsAfterDiscountUSD.removeAt(index);
-          totalsSYP.removeAt(index);
+          columns[index].dispose();
+          columns.removeAt(index);
         });
-        _saveData();
+        _saveCustomColumns();
       },
     );
   }
   
-  void _clearAllData() {
-    _showConfirmDialog(
-      title: 'مسح جميع البيانات',
-      message: 'هل أنت متأكد من مسح جميع البيانات؟ لا يمكن التراجع عن هذا الإجراء.',
-      onConfirm: () {
-        setState(() {
-          for (int i = 0; i < items.length; i++) {
-            lengthControllers[i].clear();
-            widthControllers[i].clear();
-            heightControllers[i].clear();
-            quantityControllers[i].clear();
-            discountControllers[i].clear();
-            volumes[i] = 0.0;
-            totalsBeforeDiscountUSD[i] = 0.0;
-            totalsAfterDiscountUSD[i] = 0.0;
-            totalsSYP[i] = 0.0;
-          }
-        });
-        _saveData();
-        _showSnackBar('تم مسح جميع البيانات', Colors.green);
-      },
+  void _showEditColumnDialog(int index) {
+    final nameController = TextEditingController(text: columns[index].name);
+    final lengthController = TextEditingController(text: columns[index].lengthCM.toString());
+    final widthController = TextEditingController(text: columns[index].widthCM.toString());
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('تعديل العمود'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              decoration: const InputDecoration(labelText: 'اسم العمود', border: OutlineInputBorder()),
+              textAlign: TextAlign.right,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: lengthController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'الطول (سم)', border: OutlineInputBorder()),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: widthController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'العرض (سم)', border: OutlineInputBorder()),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+          TextButton(onPressed: () {
+            String newName = nameController.text.trim();
+            if (newName.isNotEmpty) columns[index].name = newName;
+            
+            double? newLength = double.tryParse(lengthController.text);
+            if (newLength != null && newLength > 0) columns[index].lengthCM = newLength;
+            
+            double? newWidth = double.tryParse(widthController.text);
+            if (newWidth != null && newWidth > 0) columns[index].widthCM = newWidth;
+            
+            setState(() {});
+            _saveCustomColumns();
+            Navigator.pop(context);
+            _showSnackBar('تم تحديث العمود', Colors.green);
+          }, child: const Text('حفظ')),
+        ],
+      ),
     );
   }
   
@@ -182,214 +212,87 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
       }
     });
     
-    String savedUnit = prefs.getString('unit') ?? 'cm';
+    // تحميل نوع الإسفنج المختار
+    String savedSpongeType = prefs.getString('selected_sponge_type') ?? 'سوبر اول مميز';
+    var found = spongeTypes.firstWhere((t) => t.name == savedSpongeType, orElse: () => spongeTypes.first);
     setState(() {
-      selectedUnit = savedUnit;
+      selectedSpongeType = found;
     });
-    
-    int savedItemCount = prefs.getInt('item_count') ?? defaultTypes.length;
-    if (savedItemCount > defaultTypes.length) {
-      for (int i = defaultTypes.length; i < savedItemCount; i++) {
-        String? type = prefs.getString('type_$i');
-        double price = prefs.getDouble('price_$i') ?? 0.0;
-        if (type != null) {
-          items.add({
-            'type': type,
-            'price': price,
-            'isCustom': true,
-          });
-          _addControllersForIndex(items.length - 1);
-        }
-      }
-    }
-    
-    for (int i = 0; i < items.length; i++) {
-      String? length = prefs.getString('length_$i');
-      String? width = prefs.getString('width_$i');
-      String? height = prefs.getString('height_$i');
-      String? quantity = prefs.getString('quantity_$i');
-      String? discount = prefs.getString('discount_$i');
-      
-      if (length != null) lengthControllers[i].text = length;
-      if (width != null) widthControllers[i].text = width;
-      if (height != null) heightControllers[i].text = height;
-      if (quantity != null) quantityControllers[i].text = quantity;
-      if (discount != null) discountControllers[i].text = discount;
-    }
   }
   
   Future<void> _saveData() async {
     final prefs = await SharedPreferences.getInstance();
-    
     await prefs.setDouble('dollar_price', dollarPrice);
-    await prefs.setString('unit', selectedUnit);
-    await prefs.setInt('item_count', items.length);
-    
-    for (int i = 0; i < items.length; i++) {
-      if (items[i]['isCustom'] == true) {
-        await prefs.setString('type_$i', items[i]['type']);
-        await prefs.setDouble('price_$i', items[i]['price']);
-      }
-      await prefs.setString('length_$i', lengthControllers[i].text);
-      await prefs.setString('width_$i', widthControllers[i].text);
-      await prefs.setString('height_$i', heightControllers[i].text);
-      await prefs.setString('quantity_$i', quantityControllers[i].text);
-      await prefs.setString('discount_$i', discountControllers[i].text);
-    }
-  }
-
-  double _convertToMeters(double value, String unit) {
-    if (unit == 'cm') {
-      return value / 100.0;
-    }
-    return value;
-  }
-
-  void calculateForRow(int index) {
-    String lengthStr = lengthControllers[index].text.trim();
-    String widthStr = widthControllers[index].text.trim();
-    String heightStr = heightControllers[index].text.trim();
-    String quantityStr = quantityControllers[index].text.trim();
-    String discountStr = discountControllers[index].text.trim();
-
-    if (lengthStr.isEmpty || widthStr.isEmpty || heightStr.isEmpty) {
-      setState(() {
-        volumes[index] = 0.0;
-        totalsBeforeDiscountUSD[index] = 0.0;
-        totalsAfterDiscountUSD[index] = 0.0;
-        totalsSYP[index] = 0.0;
-      });
-      _saveData();
-      return;
-    }
-
-    double? lengthValue = double.tryParse(lengthStr);
-    double? widthValue = double.tryParse(widthStr);
-    double? heightValue = double.tryParse(heightStr);
-    
-    double quantity = 1.0;
-    if (quantityStr.isNotEmpty) {
-      double? parsedQuantity = double.tryParse(quantityStr);
-      if (parsedQuantity != null && parsedQuantity > 0) {
-        quantity = parsedQuantity;
-      }
-    }
-    
-    double discountPercent = 0.0;
-    if (discountStr.isNotEmpty) {
-      double? parsedDiscount = double.tryParse(discountStr);
-      if (parsedDiscount != null && parsedDiscount > 0) {
-        discountPercent = parsedDiscount.clamp(0.0, 100.0);
-      }
-    }
-
-    if (lengthValue == null || widthValue == null || heightValue == null) {
-      setState(() {
-        volumes[index] = 0.0;
-        totalsBeforeDiscountUSD[index] = 0.0;
-        totalsAfterDiscountUSD[index] = 0.0;
-        totalsSYP[index] = 0.0;
-      });
-      _saveData();
-      return;
-    }
-
-    if (lengthValue <= 0 || widthValue <= 0 || heightValue <= 0) {
-      setState(() {
-        volumes[index] = 0.0;
-        totalsBeforeDiscountUSD[index] = 0.0;
-        totalsAfterDiscountUSD[index] = 0.0;
-        totalsSYP[index] = 0.0;
-      });
-      _saveData();
-      return;
-    }
-
-    double lengthM = _convertToMeters(lengthValue, selectedUnit);
-    double widthM = _convertToMeters(widthValue, selectedUnit);
-    double heightM = _convertToMeters(heightValue, selectedUnit);
-    
-    double volumeM3 = lengthM * widthM * heightM;
-    double price = items[index]['price'];
-    double totalBeforeDiscountUSD = quantity * volumeM3 * price;
-    
-    double discountAmount = totalBeforeDiscountUSD * (discountPercent / 100);
-    double totalAfterDiscountUSD = totalBeforeDiscountUSD - discountAmount;
-    
-    double totalSYPValue = totalAfterDiscountUSD * dollarPrice;
-
-    setState(() {
-      volumes[index] = volumeM3;
-      totalsBeforeDiscountUSD[index] = totalBeforeDiscountUSD;
-      totalsAfterDiscountUSD[index] = totalAfterDiscountUSD;
-      totalsSYP[index] = totalSYPValue;
-    });
-    _saveData();
+    await prefs.setString('selected_sponge_type', selectedSpongeType.name);
+    await _saveCustomColumns();
   }
   
-  void updateSYPCalculations() {
-    String dollarPriceStr = dollarPriceController.text.trim();
-    if (dollarPriceStr.isEmpty) {
-      setState(() {
-        dollarPrice = 0.0;
-        dollarPriceError = 'الرجاء إدخال سعر الدولار';
-        for (int i = 0; i < items.length; i++) {
-          totalsSYP[i] = 0.0;
-        }
-      });
-      return;
-    }
+  Future<void> _saveCustomColumns() async {
+    final prefs = await SharedPreferences.getInstance();
     
-    double? price = double.tryParse(dollarPriceStr);
-    if (price == null || price <= 0) {
-      setState(() {
-        dollarPrice = 0.0;
-        dollarPriceError = 'الرجاء إدخال سعر صحيح أكبر من 0';
-        for (int i = 0; i < items.length; i++) {
-          totalsSYP[i] = 0.0;
-        }
-      });
-      return;
-    }
-    
-    setState(() {
-      dollarPrice = price;
-      dollarPriceError = null;
-      for (int i = 0; i < items.length; i++) {
-        totalsSYP[i] = totalsAfterDiscountUSD[i] * dollarPrice;
+    int customIndex = 0;
+    for (int i = 0; i < columns.length; i++) {
+      if (!columns[i].isFixed) {
+        await prefs.setString('custom_column_name_$customIndex', columns[i].name);
+        await prefs.setDouble('custom_column_length_$customIndex', columns[i].lengthCM);
+        await prefs.setDouble('custom_column_width_$customIndex', columns[i].widthCM);
+        await prefs.setString('custom_column_height_$customIndex', columns[i].heightCMController.text);
+        await prefs.setString('custom_column_quantity_$customIndex', columns[i].quantityController.text);
+        await prefs.setString('custom_column_discount_$customIndex', columns[i].discountController.text);
+        customIndex++;
       }
-    });
-    _saveData();
-  }
-
-  double getTotalVolume() {
-    double sum = 0.0;
-    for (double volume in volumes) {
-      sum += volume;
     }
-    return sum;
+    await prefs.setInt('custom_columns_count', customIndex);
   }
   
-  double getGrandTotalBeforeDiscountUSD() {
-    double sum = 0.0;
-    for (double total in totalsBeforeDiscountUSD) {
-      sum += total;
-    }
-    return sum;
+  double calculateVolume(ColumnData col) {
+    double height = double.tryParse(col.heightCMController.text) ?? 0;
+    if (height <= 0) return 0;
+    double volumeCM = col.lengthCM * col.widthCM * height;
+    return volumeCM / 20000; // القسمة على 20000
   }
   
-  double getGrandTotalAfterDiscountUSD() {
-    double sum = 0.0;
-    for (double total in totalsAfterDiscountUSD) {
-      sum += total;
+  double calculateTotalUSD(ColumnData col) {
+    double volumeValue = calculateVolume(col);
+    if (volumeValue <= 0) return 0;
+    
+    double quantity = double.tryParse(col.quantityController.text) ?? 1;
+    if (quantity <= 0) quantity = 1;
+    
+    double discountPercent = double.tryParse(col.discountController.text) ?? 0;
+    if (discountPercent < 0) discountPercent = 0;
+    if (discountPercent > 100) discountPercent = 100;
+    
+    double totalBeforeDiscount = quantity * volumeValue * selectedSpongeType.price;
+    double totalAfterDiscount = totalBeforeDiscount * (1 - discountPercent / 100);
+    
+    return totalAfterDiscount;
+  }
+  
+  double calculateTotalSYP(ColumnData col) {
+    return calculateTotalUSD(col) * dollarPrice;
+  }
+  
+  double getGrandTotalUSD() {
+    double sum = 0;
+    for (var col in columns) {
+      sum += calculateTotalUSD(col);
     }
     return sum;
   }
   
   double getGrandTotalSYP() {
-    double sum = 0.0;
-    for (double total in totalsSYP) {
-      sum += total;
+    double sum = 0;
+    for (var col in columns) {
+      sum += calculateTotalSYP(col);
+    }
+    return sum;
+  }
+  
+  double getTotalVolume() {
+    double sum = 0;
+    for (var col in columns) {
+      sum += calculateVolume(col);
     }
     return sum;
   }
@@ -420,54 +323,28 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
     );
   }
   
-  void _showEditNameAndPriceDialog(int index) {
-    final nameController = TextEditingController(text: items[index]['type']);
-    final priceController = TextEditingController(text: items[index]['price'].toString());
-    
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('تعديل الصنف'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(labelText: 'اسم الصنف', border: OutlineInputBorder()),
-              textAlign: TextAlign.right,
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: priceController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'السعر (\$/م³)', border: OutlineInputBorder()),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
-          TextButton(onPressed: () {
-            String newName = nameController.text.trim();
-            if (newName.isNotEmpty) {
-              items[index]['type'] = newName;
-            }
-            double? newPrice = double.tryParse(priceController.text);
-            if (newPrice != null && newPrice > 0) {
-              items[index]['price'] = newPrice;
-            }
-            setState(() {});
-            calculateForRow(index);
-            _saveData();
-            Navigator.pop(context);
-            _showSnackBar('تم تحديث البيانات', Colors.green);
-          }, child: const Text('حفظ')),
-        ],
-      ),
+  void _clearAllData() {
+    _showConfirmDialog(
+      title: 'مسح جميع البيانات',
+      message: 'هل أنت متأكد من مسح جميع البيانات؟ لا يمكن التراجع عن هذا الإجراء.',
+      onConfirm: () {
+        setState(() {
+          for (var col in columns) {
+            col.heightCMController.clear();
+            col.quantityController.clear();
+            col.discountController.clear();
+          }
+          dollarPriceController.clear();
+          dollarPrice = 0;
+        });
+        _saveData();
+        _showSnackBar('تم مسح جميع البيانات', Colors.green);
+      },
     );
   }
   
   Future<void> _sharePDF() async {
-    if (getGrandTotalAfterDiscountUSD() == 0) {
+    if (getGrandTotalUSD() == 0) {
       _showSnackBar('لا توجد بيانات للمشاركة', Colors.orange);
       return;
     }
@@ -478,45 +355,44 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
       pdf.addPage(
         pw.MultiPage(
           build: (context) => [
-            pw.Header(level: 0, child: pw.Text('فاتورة محاسبة', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold))),
+            pw.Header(level: 0, child: pw.Text('قسم الفرشات - فاتورة', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold))),
             pw.SizedBox(height: 10),
             pw.Text('التاريخ: $currentDate', style: pw.TextStyle(fontSize: 12)),
+            pw.Text('نوع الإسفنج: ${selectedSpongeType.name} (${selectedSpongeType.price} \$/م³)', style: pw.TextStyle(fontSize: 12)),
             pw.Text('سعر الدولار: ${dollarPrice > 0 ? _formatNumber(dollarPrice) : "لم يتم إدخاله"} ل.س', style: pw.TextStyle(fontSize: 12)),
             pw.SizedBox(height: 20),
             pw.Table(
               border: pw.TableBorder.all(),
               children: [
                 pw.TableRow(children: [
-                  pw.Text('النوع', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                  pw.Text('الطول', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                  pw.Text('العرض', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                  pw.Text('الارتفاع', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                  pw.Text('العمود', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                  pw.Text('الطول (سم)', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                  pw.Text('العرض (سم)', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                  pw.Text('الارتفاع (سم)', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
                   pw.Text('العدد', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                  pw.Text('الحجم (م³)', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
                   pw.Text('الخصم %', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
                   pw.Text('الإجمالي (\$)', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
                 ]),
-                for (int i = 0; i < items.length; i++)
+                for (var col in columns)
                   pw.TableRow(children: [
-                    pw.Text(items[i]['type']),
-                    pw.Text(lengthControllers[i].text.isEmpty ? '0' : lengthControllers[i].text),
-                    pw.Text(widthControllers[i].text.isEmpty ? '0' : widthControllers[i].text),
-                    pw.Text(heightControllers[i].text.isEmpty ? '0' : heightControllers[i].text),
-                    pw.Text(quantityControllers[i].text.isEmpty ? '1' : quantityControllers[i].text),
-                    pw.Text(volumes[i].toStringAsFixed(4)),
-                    pw.Text(discountControllers[i].text.isEmpty ? '0' : discountControllers[i].text),
-                    pw.Text(totalsAfterDiscountUSD[i].toStringAsFixed(2)),
+                    pw.Text(col.name),
+                    pw.Text(col.lengthCM.toString()),
+                    pw.Text(col.widthCM.toString()),
+                    pw.Text(col.heightCMController.text.isEmpty ? '0' : col.heightCMController.text),
+                    pw.Text(col.quantityController.text.isEmpty ? '1' : col.quantityController.text),
+                    pw.Text(col.discountController.text.isEmpty ? '0' : col.discountController.text),
+                    pw.Text(calculateTotalUSD(col).toStringAsFixed(2)),
                   ]),
               ],
             ),
             pw.SizedBox(height: 20),
             pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-              pw.Text('الإجمالي قبل الخصم:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-              pw.Text('${_formatNumber(getGrandTotalBeforeDiscountUSD())} \$'),
+              pw.Text('إجمالي الحجم:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+              pw.Text('${_formatNumber(getTotalVolume())}'),
             ]),
             pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-              pw.Text('الإجمالي بعد الخصم:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-              pw.Text('${_formatNumber(getGrandTotalAfterDiscountUSD())} \$'),
+              pw.Text('الإجمالي بالدولار:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+              pw.Text('\$${_formatNumber(getGrandTotalUSD())}'),
             ]),
             if (dollarPrice > 0)
               pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
@@ -528,159 +404,160 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
       );
       
       final output = await getTemporaryDirectory();
-      final file = File('${output.path}/invoice.pdf');
+      final file = File('${output.path}/mattress_invoice.pdf');
       await file.writeAsBytes(await pdf.save());
       
-      await Share.shareXFiles([XFile(file.path)], text: 'فاتورة محاسبة - $currentDate');
+      await Share.shareXFiles([XFile(file.path)], text: 'فاتورة قسم الفرشات - $currentDate');
       _showSnackBar('تم مشاركة الفاتورة بنجاح', Colors.green);
     } catch (e) {
       _showSnackBar('حدث خطأ: $e', Colors.red);
     }
   }
-
+  
+  void updateAllCalculations() {
+    setState(() {});
+    _saveData();
+  }
+  
   @override
   void dispose() {
-    for (int i = 0; i < lengthControllers.length; i++) {
-      lengthControllers[i].dispose();
-      widthControllers[i].dispose();
-      heightControllers[i].dispose();
-      quantityControllers[i].dispose();
-      discountControllers[i].dispose();
+    for (var col in columns) {
+      col.dispose();
     }
     dollarPriceController.dispose();
     super.dispose();
   }
-
+  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('صفحة المحاسبة', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('قسم الفرشات', style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
         centerTitle: true,
         actions: [
           IconButton(icon: const Icon(Icons.delete_sweep), onPressed: _clearAllData, tooltip: 'مسح الكل'),
-          IconButton(icon: const Icon(Icons.add_box), onPressed: _addNewRow, tooltip: 'إضافة صنف جديد'),
+          IconButton(icon: const Icon(Icons.add_box), onPressed: _addCustomColumn, tooltip: 'إضافة عمود جديد'),
           IconButton(icon: const Icon(Icons.share), onPressed: _sharePDF, tooltip: 'مشاركة الفاتورة'),
         ],
       ),
-      body: Column(
-        children: [
-          Container(
-            margin: const EdgeInsets.all(12),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(12)),
-            child: Column(
-              children: [
-                Row(children: [
-                  Expanded(child: Text('📅 $currentDate', style: const TextStyle(fontSize: 12))),
+      body: Directionality(
+        textDirection: TextDirection.rtl,
+        child: Column(
+          children: [
+            // معلومات أعلى الصفحة
+            Container(
+              margin: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(12)),
+              child: Column(
+                children: [
+                  Row(children: [
+                    Expanded(child: Text('📅 $currentDate', style: const TextStyle(fontSize: 12))),
+                  ]),
+                  const SizedBox(height: 8),
+                  // قائمة أنواع الإسفنج
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
-                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.teal)),
-                    child: DropdownButton<String>(
-                      value: selectedUnit,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.teal),
+                    ),
+                    child: DropdownButton<SpongeType>(
+                      value: selectedSpongeType,
+                      isExpanded: true,
                       icon: const Icon(Icons.arrow_drop_down),
                       underline: const SizedBox(),
-                      onChanged: (String? newValue) {
+                      onChanged: (SpongeType? newValue) {
                         if (newValue != null) {
-                          setState(() { selectedUnit = newValue; _saveData(); });
-                          for (int i = 0; i < items.length; i++) calculateForRow(i);
+                          setState(() {
+                            selectedSpongeType = newValue;
+                          });
+                          _saveData();
+                          updateAllCalculations();
                         }
                       },
-                      items: const [DropdownMenuItem(value: 'cm', child: Text('سم (cm)')), DropdownMenuItem(value: 'm', child: Text('متر (m)'))],
+                      items: spongeTypes.map((type) {
+                        return DropdownMenuItem(
+                          value: type,
+                          child: Text('${type.name} - ${type.price} \$/م³'),
+                        );
+                      }).toList(),
                     ),
                   ),
-                ]),
-                const SizedBox(height: 8),
-                Row(children: [
-                  Expanded(
-                    child: TextField(
-                      controller: dollarPriceController,
-                      keyboardType: TextInputType.number,
-                      onChanged: (_) => updateSYPCalculations(),
-                      decoration: InputDecoration(
-                        labelText: 'سعر الدولار (ل.س)',
-                        hintText: 'مثال: 15000',
-                        border: const OutlineInputBorder(),
-                        isDense: true,
-                        errorText: dollarPriceError,
+                  const SizedBox(height: 8),
+                  // سعر الدولار
+                  Row(children: [
+                    Expanded(
+                      child: TextField(
+                        controller: dollarPriceController,
+                        keyboardType: TextInputType.number,
+                        onChanged: (_) {
+                          double? price = double.tryParse(dollarPriceController.text);
+                          setState(() {
+                            if (price != null && price > 0) {
+                              dollarPrice = price;
+                              dollarPriceError = null;
+                            } else {
+                              dollarPrice = 0;
+                              dollarPriceError = 'الرجاء إدخال سعر صحيح';
+                            }
+                          });
+                          _saveData();
+                          updateAllCalculations();
+                        },
+                        decoration: InputDecoration(
+                          labelText: 'سعر الدولار (ل.س)',
+                          hintText: 'مثال: 15000',
+                          border: const OutlineInputBorder(),
+                          isDense: true,
+                          errorText: dollarPriceError,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(color: Colors.blue, borderRadius: BorderRadius.circular(8)),
-                    child: Column(
-                      children: [
-                        const Text('السعر', style: TextStyle(color: Colors.white, fontSize: 10)),
-                        Text(
-                          dollarPrice > 0 ? '${_formatNumber(dollarPrice)} ل.س' : 'لم يدخل',
-                          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
-                  ),
-                ]),
-              ],
-            ),
-          ),
-          
-          Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: SingleChildScrollView(
-                scrollDirection: Axis.vertical,
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: DataTable(
-                    columnSpacing: 6,
-                    border: TableBorder.all(color: Colors.grey.shade300, width: 1),
-                    columns: [
-                      const DataColumn(label: Text('النوع', style: TextStyle(fontWeight: FontWeight.bold))),
-                      DataColumn(label: Text('الطول (${selectedUnit == 'cm' ? 'سم' : 'م'})', style: const TextStyle(fontWeight: FontWeight.bold))),
-                      DataColumn(label: Text('العرض (${selectedUnit == 'cm' ? 'سم' : 'م'})', style: const TextStyle(fontWeight: FontWeight.bold))),
-                      DataColumn(label: Text('الارتفاع (${selectedUnit == 'cm' ? 'سم' : 'م'})', style: const TextStyle(fontWeight: FontWeight.bold))),
-                      const DataColumn(label: Text('العدد', style: TextStyle(fontWeight: FontWeight.bold))),
-                      const DataColumn(label: Text('الحجم (م³)', style: TextStyle(fontWeight: FontWeight.bold))),
-                      const DataColumn(label: Text('الخصم %', style: TextStyle(fontWeight: FontWeight.bold))),
-                      const DataColumn(label: Text('السعر (\$/م³)', style: TextStyle(fontWeight: FontWeight.bold))),
-                      const DataColumn(label: Text('الإجمالي (\$)', style: TextStyle(fontWeight: FontWeight.bold))),
-                      const DataColumn(label: Text('الإجمالي (ل.س)', style: TextStyle(fontWeight: FontWeight.bold))),
-                      const DataColumn(label: Text('', style: TextStyle(fontWeight: FontWeight.bold))),
-                    ],
-                    rows: List.generate(items.length, (index) {
-                      Color? rowColor = index % 2 == 0 ? Colors.teal.shade50 : null;
-                      return DataRow(
-                        color: rowColor != null ? WidgetStateProperty.all(rowColor) : null,
-                        cells: [
-                          DataCell(SizedBox(
-                            width: 120,
-                            child: Row(children: [
-                              Expanded(child: Text(items[index]['type'], style: const TextStyle(fontSize: 12))),
-                              IconButton(icon: const Icon(Icons.edit, size: 16), onPressed: () => _showEditNameAndPriceDialog(index)),
-                            ]),
-                          )),
-                          DataCell(SizedBox(width: 70, child: TextField(controller: lengthControllers[index], keyboardType: TextInputType.number, decoration: _inputDecoration()))),
-                          DataCell(SizedBox(width: 70, child: TextField(controller: widthControllers[index], keyboardType: TextInputType.number, decoration: _inputDecoration()))),
-                          DataCell(SizedBox(width: 70, child: TextField(controller: heightControllers[index], keyboardType: TextInputType.number, decoration: _inputDecoration()))),
-                          DataCell(SizedBox(width: 60, child: TextField(controller: quantityControllers[index], keyboardType: TextInputType.number, decoration: _inputDecoration(hint: '1')))),
-                          DataCell(Container(width: 70, child: Text(volumes[index].toStringAsFixed(4), style: const TextStyle(color: Colors.teal, fontWeight: FontWeight.bold)))),
-                          DataCell(SizedBox(width: 60, child: TextField(controller: discountControllers[index], keyboardType: TextInputType.number, decoration: _inputDecoration(hint: '0')))),
-                          DataCell(Container(width: 70, child: Text('${items[index]['price']}', style: const TextStyle(fontWeight: FontWeight.bold)))),
-                          DataCell(Container(width: 80, child: Text(_formatNumber(totalsAfterDiscountUSD[index]), style: TextStyle(color: Colors.green.shade700, fontWeight: FontWeight.bold)))),
-                          DataCell(Container(width: 100, child: Text(_formatNumber(totalsSYP[index]), style: TextStyle(color: Colors.blue.shade700, fontWeight: FontWeight.bold)))),
-                          DataCell(IconButton(icon: const Icon(Icons.delete, color: Colors.red, size: 20), onPressed: () => _removeRow(index))),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(color: Colors.blue, borderRadius: BorderRadius.circular(8)),
+                      child: Column(
+                        children: [
+                          const Text('السعر', style: TextStyle(color: Colors.white, fontSize: 10)),
+                          Text(
+                            dollarPrice > 0 ? '${_formatNumber(dollarPrice)} ل.س' : 'لم يدخل',
+                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
                         ],
-                      );
-                    }),
+                      ),
+                    ),
+                  ]),
+                ],
+              ),
+            ),
+            
+            // الجدول - الأعمدة
+            Expanded(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.vertical,
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: columns.asMap().entries.map((entry) {
+                        int index = entry.key;
+                        ColumnData col = entry.value;
+                        return _buildColumnCard(index, col);
+                      }).toList(),
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
       bottomNavigationBar: Container(
         color: Colors.teal.shade50,
@@ -690,16 +567,12 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
           children: [
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
               const Text('إجمالي الحجم:', style: TextStyle(fontWeight: FontWeight.bold)),
-              Text('${_formatNumber(getTotalVolume())} م³', style: const TextStyle(color: Colors.teal, fontWeight: FontWeight.bold)),
+              Text('${_formatNumber(getTotalVolume())}', style: const TextStyle(color: Colors.teal, fontWeight: FontWeight.bold)),
             ]),
             const Divider(),
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              const Text('الإجمالي قبل الخصم:', style: TextStyle(fontWeight: FontWeight.bold)),
-              Text('\$${_formatNumber(getGrandTotalBeforeDiscountUSD())}', style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
-            ]),
-            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              const Text('الإجمالي بعد الخصم:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal)),
-              Text('\$${_formatNumber(getGrandTotalAfterDiscountUSD())}', style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 16)),
+              const Text('الإجمالي بالدولار:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal)),
+              Text('\$${_formatNumber(getGrandTotalUSD())}', style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 16)),
             ]),
             if (dollarPrice > 0) ...[
               const SizedBox(height: 8),
@@ -716,12 +589,199 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
     );
   }
   
-  InputDecoration _inputDecoration({String hint = '0'}) {
+  Widget _buildColumnCard(int index, ColumnData col) {
+    return Container(
+      width: 180,
+      margin: const EdgeInsets.symmetric(horizontal: 6),
+      decoration: BoxDecoration(
+        color: col.isFixed ? Colors.teal.shade50 : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.teal.shade200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          // رأس العمود
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.teal,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(12),
+                topRight: Radius.circular(12),
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    col.name,
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+                if (!col.isFixed)
+                  IconButton(
+                    icon: const Icon(Icons.edit, color: Colors.white, size: 18),
+                    onPressed: () => _showEditColumnDialog(index),
+                  ),
+                if (!col.isFixed)
+                  IconButton(
+                    icon: const Icon(Icons.delete, color: Colors.white, size: 18),
+                    onPressed: () => _removeColumn(index),
+                  ),
+              ],
+            ),
+          ),
+          
+          // محتوى العمود
+          Padding(
+            padding: const EdgeInsets.all(10),
+            child: Column(
+              children: [
+                // الأبعاد الثابتة
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.teal.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    children: [
+                      Text('📏 ${col.lengthCM} × ${col.widthCM} سم',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                
+                // الارتفاع
+                TextField(
+                  controller: col.heightCMController,
+                  keyboardType: TextInputType.number,
+                  onChanged: (_) => updateAllCalculations(),
+                  decoration: _inputDecoration(label: 'الارتفاع (سم)', hint: '0'),
+                ),
+                const SizedBox(height: 8),
+                
+                // العدد
+                TextField(
+                  controller: col.quantityController,
+                  keyboardType: TextInputType.number,
+                  onChanged: (_) => updateAllCalculations(),
+                  decoration: _inputDecoration(label: 'العدد', hint: '1'),
+                ),
+                const SizedBox(height: 8),
+                
+                // الخصم
+                TextField(
+                  controller: col.discountController,
+                  keyboardType: TextInputType.number,
+                  onChanged: (_) => updateAllCalculations(),
+                  decoration: _inputDecoration(label: 'الخصم %', hint: '0'),
+                ),
+                const SizedBox(height: 12),
+                
+                // النتائج
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    children: [
+                      Text(
+                        'الحجم: ${_formatNumber(calculateVolume(col))}',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '\$${_formatNumber(calculateTotalUSD(col))}',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.green.shade700),
+                      ),
+                      if (dollarPrice > 0)
+                        Text(
+                          '${_formatNumber(calculateTotalSYP(col))} ل.س',
+                          style: TextStyle(fontSize: 12, color: Colors.blue.shade700),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  InputDecoration _inputDecoration({required String label, String hint = '0'}) {
     return InputDecoration(
+      labelText: label,
       hintText: hint,
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
       isDense: true,
       contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
     );
+  }
+}
+
+// ==================== الفئات المساعدة ====================
+
+class SpongeType {
+  final String name;
+  final double price;
+  
+  SpongeType({required this.name, required this.price});
+  
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is SpongeType && other.name == name;
+  }
+  
+  @override
+  int get hashCode => name.hashCode;
+}
+
+class FixedColumn {
+  final String name;
+  final double lengthCM;
+  final double widthCM;
+  
+  FixedColumn({required this.name, required this.lengthCM, required this.widthCM});
+}
+
+class ColumnData {
+  String name;
+  double lengthCM;
+  double widthCM;
+  final TextEditingController heightCMController;
+  final TextEditingController quantityController;
+  final TextEditingController discountController;
+  final bool isFixed;
+  
+  ColumnData({
+    required this.name,
+    required this.lengthCM,
+    required this.widthCM,
+    required this.heightCMController,
+    required this.quantityController,
+    required this.discountController,
+    required this.isFixed,
+  });
+  
+  void dispose() {
+    heightCMController.dispose();
+    quantityController.dispose();
+    discountController.dispose();
   }
 }
