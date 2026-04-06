@@ -1,4 +1,4 @@
-// lib/accounting_table_screen.dart
+// lib/support_screen.dart
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -6,26 +6,27 @@ import 'package:share_plus/share_plus.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:path_provider/path_provider.dart';
 import 'package:intl/intl.dart';
-import 'support_screen.dart';
+import 'accounting_table_screen.dart';
 
-class AccountingTableScreen extends StatefulWidget {
-  const AccountingTableScreen({super.key});
+class SupportScreen extends StatefulWidget {
+  const SupportScreen({super.key});
 
   @override
-  State<AccountingTableScreen> createState() => _AccountingTableScreenState();
+  State<SupportScreen> createState() => _SupportScreenState();
 }
 
-class _AccountingTableScreenState extends State<AccountingTableScreen> {
-  final List<ColumnData> columns = [];
+class _SupportScreenState extends State<SupportScreen> {
+  final List<SupportColumnData> columns = [];
   
-  final List<FixedColumn> fixedColumns = [
-    FixedColumn(name: 'العمود 1', lengthCM: 200, widthCM: 70),
-    FixedColumn(name: 'العمود 2', lengthCM: 180, widthCM: 70),
-    FixedColumn(name: 'العمود 3', lengthCM: 100, widthCM: 100),
+  final List<SupportFixedColumn> fixedColumns = [
+    SupportFixedColumn(name: 'العمود 1', lengthCM: 200, thicknessCM: 10),
+    SupportFixedColumn(name: 'العمود 2', lengthCM: 180, thicknessCM: 10),
+    SupportFixedColumn(name: 'العمود 3', lengthCM: 160, thicknessCM: 10),
+    SupportFixedColumn(name: 'العمود 4', lengthCM: 140, thicknessCM: 10),
   ];
   
-  List<SpongeType> spongeTypes = [];
-  SpongeType? selectedSpongeType;
+  List<SupportType> supportTypes = [];
+  SupportType? selectedSupportType;
   
   final TextEditingController dollarPriceController = TextEditingController();
   double dollarPrice = 0.0;
@@ -40,25 +41,25 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
     _initializeColumns();
   }
   
-  void _initializeSpongeTypes() {
-    if (spongeTypes.isEmpty) {
-      spongeTypes = [
-        SpongeType(name: 'سوبر اول مميز', price: 2.65),
-        SpongeType(name: 'سوفت', price: 2.70),
-        SpongeType(name: 'سوبر ثقيل مميز', price: 3.00),
-        SpongeType(name: 'ممتاز اول مميز', price: 2.15),
-        SpongeType(name: 'سوبر اول', price: 2.65),
+  void _initializeSupportTypes() {
+    if (supportTypes.isEmpty) {
+      supportTypes = [
+        SupportType(name: 'سوبر اول مميز', price: 2.85),
+        SupportType(name: 'سوفت', price: 2.70),
+        SupportType(name: 'سوبر ثقيل مميز', price: 3.00),
+        SupportType(name: 'ممتاز اول مميز', price: 2.15),
+        SupportType(name: 'سوبر اول', price: 2.65),
       ];
     }
   }
   
   void _initializeColumns() {
     for (var fixed in fixedColumns) {
-      columns.add(ColumnData(
+      columns.add(SupportColumnData(
         name: fixed.name,
         lengthCM: fixed.lengthCM,
-        widthCM: fixed.widthCM,
-        heightCMController: TextEditingController(),
+        thicknessCM: fixed.thicknessCM,
+        heightController: TextEditingController(),
         quantityController: TextEditingController(),
         discountController: TextEditingController(),
         isFixed: true,
@@ -69,29 +70,29 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
   
   void _loadCustomColumns() async {
     final prefs = await SharedPreferences.getInstance();
-    int customCount = prefs.getInt('custom_columns_count') ?? 0;
+    int customCount = prefs.getInt('support_custom_columns_count') ?? 0;
     
     for (int i = 0; i < customCount; i++) {
-      String? name = prefs.getString('custom_column_name_$i');
-      double? length = prefs.getDouble('custom_column_length_$i');
-      double? width = prefs.getDouble('custom_column_width_$i');
+      String? name = prefs.getString('support_custom_column_name_$i');
+      double? length = prefs.getDouble('support_custom_column_length_$i');
+      double? thickness = prefs.getDouble('support_custom_column_thickness_$i');
       
-      if (name != null && length != null && width != null) {
-        columns.add(ColumnData(
+      if (name != null && length != null && thickness != null) {
+        columns.add(SupportColumnData(
           name: name,
           lengthCM: length,
-          widthCM: width,
-          heightCMController: TextEditingController(),
+          thicknessCM: thickness,
+          heightController: TextEditingController(),
           quantityController: TextEditingController(),
           discountController: TextEditingController(),
           isFixed: false,
         ));
         
-        String? height = prefs.getString('custom_column_height_$i');
-        String? quantity = prefs.getString('custom_column_quantity_$i');
-        String? discount = prefs.getString('custom_column_discount_$i');
+        String? height = prefs.getString('support_custom_column_height_$i');
+        String? quantity = prefs.getString('support_custom_column_quantity_$i');
+        String? discount = prefs.getString('support_custom_column_discount_$i');
         
-        if (height != null) columns.last.heightCMController.text = height;
+        if (height != null) columns.last.heightController.text = height;
         if (quantity != null) columns.last.quantityController.text = quantity;
         if (discount != null) columns.last.discountController.text = discount;
       }
@@ -100,11 +101,11 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
   
   void _addCustomColumn() {
     setState(() {
-      columns.add(ColumnData(
+      columns.add(SupportColumnData(
         name: 'عمود جديد',
         lengthCM: 100,
-        widthCM: 100,
-        heightCMController: TextEditingController(),
+        thicknessCM: 10,
+        heightController: TextEditingController(),
         quantityController: TextEditingController(),
         discountController: TextEditingController(),
         isFixed: false,
@@ -138,7 +139,7 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
   void _showEditColumnDialog(int index) {
     final nameController = TextEditingController(text: columns[index].name);
     final lengthController = TextEditingController(text: columns[index].lengthCM.toString());
-    final widthController = TextEditingController(text: columns[index].widthCM.toString());
+    final thicknessController = TextEditingController(text: columns[index].thicknessCM.toString());
     
     showDialog(
       context: context,
@@ -160,9 +161,9 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
             ),
             const SizedBox(height: 12),
             TextField(
-              controller: widthController,
+              controller: thicknessController,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'العرض (سم)', border: OutlineInputBorder()),
+              decoration: const InputDecoration(labelText: 'السماكة (سم)', border: OutlineInputBorder()),
             ),
           ],
         ),
@@ -175,8 +176,8 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
             double? newLength = double.tryParse(lengthController.text);
             if (newLength != null && newLength > 0) columns[index].lengthCM = newLength;
             
-            double? newWidth = double.tryParse(widthController.text);
-            if (newWidth != null && newWidth > 0) columns[index].widthCM = newWidth;
+            double? newThickness = double.tryParse(thicknessController.text);
+            if (newThickness != null && newThickness > 0) columns[index].thicknessCM = newThickness;
             
             setState(() {});
             _saveCustomColumns();
@@ -188,14 +189,14 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
     );
   }
   
-  void _addNewSpongeType() {
+  void _addNewSupportType() {
     final nameController = TextEditingController();
     final priceController = TextEditingController();
     
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('إضافة نوع إسفنج جديد'),
+        title: const Text('إضافة نوع مسند جديد'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -220,12 +221,12 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
             
             if (newName.isNotEmpty && newPrice != null && newPrice > 0) {
               setState(() {
-                spongeTypes.add(SpongeType(name: newName, price: newPrice));
-                if (selectedSpongeType == null) {
-                  selectedSpongeType = spongeTypes.last;
+                supportTypes.add(SupportType(name: newName, price: newPrice));
+                if (selectedSupportType == null) {
+                  selectedSupportType = supportTypes.last;
                 }
               });
-              _saveSpongeTypes();
+              _saveSupportTypes();
               _showSnackBar('تم إضافة النوع بنجاح', Colors.green);
             } else {
               _showSnackBar('الرجاء إدخال اسم وسعر صحيحين', Colors.red);
@@ -237,7 +238,7 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
     );
   }
   
-  void _editSpongeType(SpongeType type, int index) {
+  void _editSupportType(SupportType type, int index) {
     final nameController = TextEditingController(text: type.name);
     final priceController = TextEditingController(text: type.price.toString());
     
@@ -269,12 +270,12 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
             
             if (newName.isNotEmpty && newPrice != null && newPrice > 0) {
               setState(() {
-                spongeTypes[index] = SpongeType(name: newName, price: newPrice);
-                if (selectedSpongeType?.name == type.name) {
-                  selectedSpongeType = spongeTypes[index];
+                supportTypes[index] = SupportType(name: newName, price: newPrice);
+                if (selectedSupportType?.name == type.name) {
+                  selectedSupportType = supportTypes[index];
                 }
               });
-              _saveSpongeTypes();
+              _saveSupportTypes();
               _showSnackBar('تم تعديل النوع بنجاح', Colors.green);
             } else {
               _showSnackBar('الرجاء إدخال اسم وسعر صحيحين', Colors.red);
@@ -286,8 +287,8 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
     );
   }
   
-  void _deleteSpongeType(SpongeType type, int index) {
-    if (spongeTypes.length <= 1) {
+  void _deleteSupportType(SupportType type, int index) {
+    if (supportTypes.length <= 1) {
       _showSnackBar('لا يمكن حذف النوع الوحيد المتبقي', Colors.orange);
       return;
     }
@@ -297,50 +298,50 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
       message: 'هل أنت متأكد من حذف نوع "${type.name}"؟',
       onConfirm: () {
         setState(() {
-          spongeTypes.removeAt(index);
-          if (selectedSpongeType?.name == type.name) {
-            selectedSpongeType = spongeTypes.first;
+          supportTypes.removeAt(index);
+          if (selectedSupportType?.name == type.name) {
+            selectedSupportType = supportTypes.first;
           }
         });
-        _saveSpongeTypes();
+        _saveSupportTypes();
         _showSnackBar('تم حذف النوع بنجاح', Colors.green);
       },
     );
   }
   
-  Future<void> _saveSpongeTypes() async {
+  Future<void> _saveSupportTypes() async {
     final prefs = await SharedPreferences.getInstance();
     List<String> names = [];
-    List<String> prices = []; // تخزين كـ String بدلاً من Double
-    for (var type in spongeTypes) {
+    List<String> prices = [];
+    for (var type in supportTypes) {
       names.add(type.name);
       prices.add(type.price.toString());
     }
-    await prefs.setStringList('sponge_names', names);
-    await prefs.setStringList('sponge_prices', prices);
-    if (selectedSpongeType != null) {
-      await prefs.setString('selected_sponge_type', selectedSpongeType!.name);
+    await prefs.setStringList('support_names', names);
+    await prefs.setStringList('support_prices', prices);
+    if (selectedSupportType != null) {
+      await prefs.setString('selected_support_type', selectedSupportType!.name);
     }
   }
   
-  Future<void> _loadSpongeTypes() async {
+  Future<void> _loadSupportTypes() async {
     final prefs = await SharedPreferences.getInstance();
-    List<String>? names = prefs.getStringList('sponge_names');
-    List<String>? pricesStr = prefs.getStringList('sponge_prices');
+    List<String>? names = prefs.getStringList('support_names');
+    List<String>? pricesStr = prefs.getStringList('support_prices');
     
     if (names != null && pricesStr != null && names.isNotEmpty) {
-      spongeTypes = [];
+      supportTypes = [];
       for (int i = 0; i < names.length; i++) {
         double price = double.tryParse(pricesStr[i]) ?? 0.0;
-        spongeTypes.add(SpongeType(name: names[i], price: price));
+        supportTypes.add(SupportType(name: names[i], price: price));
       }
     } else {
-      _initializeSpongeTypes();
+      _initializeSupportTypes();
     }
     
-    String savedSpongeType = prefs.getString('selected_sponge_type') ?? spongeTypes.first.name;
-    var found = spongeTypes.firstWhere((t) => t.name == savedSpongeType, orElse: () => spongeTypes.first);
-    selectedSpongeType = found;
+    String savedSupportType = prefs.getString('selected_support_type') ?? supportTypes.first.name;
+    var found = supportTypes.firstWhere((t) => t.name == savedSupportType, orElse: () => supportTypes.first);
+    selectedSupportType = found;
   }
   
   void _updateDate() {
@@ -353,7 +354,7 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
   Future<void> _loadSavedData() async {
     final prefs = await SharedPreferences.getInstance();
     
-    double savedDollarPrice = prefs.getDouble('dollar_price') ?? 0.0;
+    double savedDollarPrice = prefs.getDouble('support_dollar_price') ?? 0.0;
     setState(() {
       dollarPrice = savedDollarPrice;
       if (savedDollarPrice > 0) {
@@ -361,14 +362,14 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
       }
     });
     
-    await _loadSpongeTypes();
+    await _loadSupportTypes();
   }
   
   Future<void> _saveData() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble('dollar_price', dollarPrice);
-    if (selectedSpongeType != null) {
-      await prefs.setString('selected_sponge_type', selectedSpongeType!.name);
+    await prefs.setDouble('support_dollar_price', dollarPrice);
+    if (selectedSupportType != null) {
+      await prefs.setString('selected_support_type', selectedSupportType!.name);
     }
     await _saveCustomColumns();
   }
@@ -379,27 +380,27 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
     int customIndex = 0;
     for (int i = 0; i < columns.length; i++) {
       if (!columns[i].isFixed) {
-        await prefs.setString('custom_column_name_$customIndex', columns[i].name);
-        await prefs.setDouble('custom_column_length_$customIndex', columns[i].lengthCM);
-        await prefs.setDouble('custom_column_width_$customIndex', columns[i].widthCM);
-        await prefs.setString('custom_column_height_$customIndex', columns[i].heightCMController.text);
-        await prefs.setString('custom_column_quantity_$customIndex', columns[i].quantityController.text);
-        await prefs.setString('custom_column_discount_$customIndex', columns[i].discountController.text);
+        await prefs.setString('support_custom_column_name_$customIndex', columns[i].name);
+        await prefs.setDouble('support_custom_column_length_$customIndex', columns[i].lengthCM);
+        await prefs.setDouble('support_custom_column_thickness_$customIndex', columns[i].thicknessCM);
+        await prefs.setString('support_custom_column_height_$customIndex', columns[i].heightController.text);
+        await prefs.setString('support_custom_column_quantity_$customIndex', columns[i].quantityController.text);
+        await prefs.setString('support_custom_column_discount_$customIndex', columns[i].discountController.text);
         customIndex++;
       }
     }
-    await prefs.setInt('custom_columns_count', customIndex);
+    await prefs.setInt('support_custom_columns_count', customIndex);
   }
   
-  double calculateVolume(ColumnData col) {
-    double height = double.tryParse(col.heightCMController.text) ?? 0;
+  double calculateVolume(SupportColumnData col) {
+    double height = double.tryParse(col.heightController.text) ?? 0;
     if (height <= 0) return 0;
-    double volumeCM = col.lengthCM * col.widthCM * height;
+    double volumeCM = col.lengthCM * col.thicknessCM * height;
     return volumeCM / 20000;
   }
   
-  double calculateTotalUSD(ColumnData col) {
-    if (selectedSpongeType == null) return 0;
+  double calculateTotalUSD(SupportColumnData col) {
+    if (selectedSupportType == null) return 0;
     double volumeValue = calculateVolume(col);
     if (volumeValue <= 0) return 0;
     
@@ -410,13 +411,13 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
     if (discountPercent < 0) discountPercent = 0;
     if (discountPercent > 100) discountPercent = 100;
     
-    double totalBeforeDiscount = quantity * volumeValue * selectedSpongeType!.price;
+    double totalBeforeDiscount = quantity * volumeValue * selectedSupportType!.price;
     double totalAfterDiscount = totalBeforeDiscount * (1 - discountPercent / 100);
     
     return totalAfterDiscount;
   }
   
-  double calculateTotalSYP(ColumnData col) {
+  double calculateTotalSYP(SupportColumnData col) {
     return calculateTotalUSD(col) * dollarPrice;
   }
   
@@ -477,7 +478,7 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
       onConfirm: () {
         setState(() {
           for (var col in columns) {
-            col.heightCMController.clear();
+            col.heightController.clear();
             col.quantityController.clear();
             col.discountController.clear();
           }
@@ -502,10 +503,10 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
       pdf.addPage(
         pw.MultiPage(
           build: (context) => [
-            pw.Header(level: 0, child: pw.Text('قسم الفرشات - فاتورة', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold))),
+            pw.Header(level: 0, child: pw.Text('قسم المساند - فاتورة', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold))),
             pw.SizedBox(height: 10),
             pw.Text('التاريخ: $currentDate', style: pw.TextStyle(fontSize: 12)),
-            pw.Text('نوع الإسفنج: ${selectedSpongeType?.name ?? "غير محدد"} (${selectedSpongeType?.price ?? 0} \$/م³)', style: pw.TextStyle(fontSize: 12)),
+            pw.Text('نوع المسند: ${selectedSupportType?.name ?? "غير محدد"} (${selectedSupportType?.price ?? 0} \$/م³)', style: pw.TextStyle(fontSize: 12)),
             pw.Text('سعر الدولار: ${dollarPrice > 0 ? _formatNumber(dollarPrice) : "لم يتم إدخاله"} ل.س', style: pw.TextStyle(fontSize: 12)),
             pw.SizedBox(height: 20),
             pw.Table(
@@ -514,7 +515,7 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
                 pw.TableRow(children: [
                   pw.Text('العمود', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
                   pw.Text('الطول (سم)', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                  pw.Text('العرض (سم)', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                  pw.Text('السماكة (سم)', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
                   pw.Text('الارتفاع (سم)', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
                   pw.Text('العدد', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
                   pw.Text('الخصم %', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
@@ -524,8 +525,8 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
                   pw.TableRow(children: [
                     pw.Text(col.name),
                     pw.Text(col.lengthCM.toString()),
-                    pw.Text(col.widthCM.toString()),
-                    pw.Text(col.heightCMController.text.isEmpty ? '0' : col.heightCMController.text),
+                    pw.Text(col.thicknessCM.toString()),
+                    pw.Text(col.heightController.text.isEmpty ? '0' : col.heightController.text),
                     pw.Text(col.quantityController.text.isEmpty ? '1' : col.quantityController.text),
                     pw.Text(col.discountController.text.isEmpty ? '0' : col.discountController.text),
                     pw.Text(calculateTotalUSD(col).toStringAsFixed(2)),
@@ -551,10 +552,10 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
       );
       
       final output = await getTemporaryDirectory();
-      final file = File('${output.path}/invoice.pdf');
+      final file = File('${output.path}/support_invoice.pdf');
       await file.writeAsBytes(await pdf.save());
       
-      await Share.shareXFiles([XFile(file.path)], text: 'فاتورة الفرشات - $currentDate');
+      await Share.shareXFiles([XFile(file.path)], text: 'فاتورة المساند - $currentDate');
       _showSnackBar('تم مشاركة الفاتورة بنجاح', Colors.green);
     } catch (e) {
       _showSnackBar('حدث خطأ: $e', Colors.red);
@@ -579,25 +580,25 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('قسم الفرشات', style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.teal,
+        title: const Text('قسم المساند', style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.orange,
         foregroundColor: Colors.white,
         centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_forward),
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const SupportScreen()),
-            );
-          },
-          tooltip: 'الانتقال إلى شاشة المساند',
-        ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (context) => const AccountingTableScreen()),
+              );
+            },
+            tooltip: 'الرجوع إلى قسم الفرشات',
+          ),
           IconButton(icon: const Icon(Icons.delete_sweep), onPressed: _clearAllData, tooltip: 'مسح الكل'),
           IconButton(icon: const Icon(Icons.add_box), onPressed: _addCustomColumn, tooltip: 'إضافة عمود جديد'),
           IconButton(icon: const Icon(Icons.share), onPressed: _sharePDF, tooltip: 'مشاركة الفاتورة'),
-          IconButton(icon: const Icon(Icons.add_circle), onPressed: _addNewSpongeType, tooltip: 'إضافة نوع إسفنج جديد'),
+          IconButton(icon: const Icon(Icons.add_circle), onPressed: _addNewSupportType, tooltip: 'إضافة نوع مسند جديد'),
         ],
       ),
       body: Column(
@@ -605,7 +606,7 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
           Container(
             margin: const EdgeInsets.all(12),
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(12)),
             child: Column(
               children: [
                 Row(children: [
@@ -620,25 +621,25 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.teal),
+                          border: Border.all(color: Colors.orange),
                         ),
-                        child: DropdownButton<SpongeType>(
-                          value: selectedSpongeType,
+                        child: DropdownButton<SupportType>(
+                          value: selectedSupportType,
                           isExpanded: true,
                           icon: const Icon(Icons.arrow_drop_down),
                           underline: const SizedBox(),
-                          onChanged: (SpongeType? newValue) {
+                          onChanged: (SupportType? newValue) {
                             if (newValue != null) {
                               setState(() {
-                                selectedSpongeType = newValue;
+                                selectedSupportType = newValue;
                               });
                               _saveData();
                               updateAllCalculations();
                             }
                           },
-                          items: spongeTypes.asMap().entries.map((entry) {
+                          items: supportTypes.asMap().entries.map((entry) {
                             int index = entry.key;
-                            SpongeType type = entry.value;
+                            SupportType type = entry.value;
                             return DropdownMenuItem(
                               value: type,
                               child: Row(
@@ -646,11 +647,11 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
                                   Expanded(child: Text('${type.name} - ${type.price} \$/م³')),
                                   IconButton(
                                     icon: const Icon(Icons.edit, size: 18),
-                                    onPressed: () => _editSpongeType(type, index),
+                                    onPressed: () => _editSupportType(type, index),
                                   ),
                                   IconButton(
                                     icon: const Icon(Icons.delete, size: 18, color: Colors.red),
-                                    onPressed: () => _deleteSpongeType(type, index),
+                                    onPressed: () => _deleteSupportType(type, index),
                                   ),
                                 ],
                               ),
@@ -720,7 +721,7 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: columns.asMap().entries.map((entry) {
                       int index = entry.key;
-                      ColumnData col = entry.value;
+                      SupportColumnData col = entry.value;
                       return _buildColumnCard(index, col);
                     }).toList(),
                   ),
@@ -731,18 +732,18 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
         ],
       ),
       bottomNavigationBar: Container(
-        color: Colors.teal.shade50,
+        color: Colors.orange.shade50,
         padding: const EdgeInsets.all(12),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
               const Text('إجمالي الحجم:', style: TextStyle(fontWeight: FontWeight.bold)),
-              Text('${_formatNumber(getTotalVolume())}', style: const TextStyle(color: Colors.teal, fontWeight: FontWeight.bold)),
+              Text('${_formatNumber(getTotalVolume())}', style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
             ]),
             const Divider(),
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              const Text('الإجمالي بالدولار:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal)),
+              const Text('الإجمالي بالدولار:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange)),
               Text('\$${_formatNumber(getGrandTotalUSD())}', style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 16)),
             ]),
             if (dollarPrice > 0) ...[
@@ -760,14 +761,14 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
     );
   }
   
-  Widget _buildColumnCard(int index, ColumnData col) {
+  Widget _buildColumnCard(int index, SupportColumnData col) {
     return Container(
       width: 180,
       margin: const EdgeInsets.symmetric(horizontal: 6),
       decoration: BoxDecoration(
-        color: col.isFixed ? Colors.teal.shade50 : Colors.white,
+        color: col.isFixed ? Colors.orange.shade50 : Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.teal.shade200),
+        border: Border.all(color: Colors.orange.shade200),
         boxShadow: [
           BoxShadow(
             color: Colors.grey.withValues(alpha: 0.1), // تم الإصلاح
@@ -781,7 +782,7 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: Colors.teal,
+              color: Colors.orange,
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(12),
                 topRight: Radius.circular(12),
@@ -818,12 +819,12 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
                 Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: Colors.teal.shade100,
+                    color: Colors.orange.shade100,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Column(
                     children: [
-                      Text('📏 ${col.lengthCM} × ${col.widthCM} سم',
+                      Text('📏 ${col.lengthCM} × ${col.thicknessCM} سم',
                           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                     ],
                   ),
@@ -831,7 +832,7 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
                 const SizedBox(height: 8),
                 
                 TextField(
-                  controller: col.heightCMController,
+                  controller: col.heightController,
                   keyboardType: TextInputType.number,
                   onChanged: (_) => updateAllCalculations(),
                   decoration: _inputDecoration(label: 'الارتفاع (سم)', hint: '0'),
@@ -898,51 +899,51 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
   }
 }
 
-class SpongeType {
+class SupportType {
   String name;
   double price;
   
-  SpongeType({required this.name, required this.price});
+  SupportType({required this.name, required this.price});
   
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
-    return other is SpongeType && other.name == name;
+    return other is SupportType && other.name == name;
   }
   
   @override
   int get hashCode => name.hashCode;
 }
 
-class FixedColumn {
+class SupportFixedColumn {
   final String name;
   final double lengthCM;
-  final double widthCM;
+  final double thicknessCM;
   
-  FixedColumn({required this.name, required this.lengthCM, required this.widthCM});
+  SupportFixedColumn({required this.name, required this.lengthCM, required this.thicknessCM});
 }
 
-class ColumnData {
+class SupportColumnData {
   String name;
   double lengthCM;
-  double widthCM;
-  final TextEditingController heightCMController;
+  double thicknessCM;
+  final TextEditingController heightController;
   final TextEditingController quantityController;
   final TextEditingController discountController;
   final bool isFixed;
   
-  ColumnData({
+  SupportColumnData({
     required this.name,
     required this.lengthCM,
-    required this.widthCM,
-    required this.heightCMController,
+    required this.thicknessCM,
+    required this.heightController,
     required this.quantityController,
     required this.discountController,
     required this.isFixed,
   });
   
   void dispose() {
-    heightCMController.dispose();
+    heightController.dispose();
     quantityController.dispose();
     discountController.dispose();
   }
