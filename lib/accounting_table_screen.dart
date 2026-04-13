@@ -1,4 +1,5 @@
 // lib/accounting_table_screen.dart
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -482,6 +483,32 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
   
   // ==================== نهاية دوال الفاتورة ====================
   
+  void _showFinalInvoice() async {
+    final prefs = await SharedPreferences.getInstance();
+    
+    List<String> mattressItemsJson = [];
+    for (var item in getInvoiceItems()) {
+      mattressItemsJson.add(jsonEncode({
+        'section': item.section,
+        'type': item.type,
+        'dimensions': item.dimensions,
+        'height': item.height,
+        'quantity': item.quantity,
+        'discount': item.discount,
+        'totalUSD': item.totalUSD,
+        'totalSYP': item.totalSYP,
+      }));
+    }
+    await prefs.setStringList('temp_mattress_items', mattressItemsJson);
+    await prefs.setDouble('temp_mattress_dollar_price', dollarPrice);
+    await prefs.setString('temp_mattress_type', getCurrentSpongeType());
+    
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const FinalInvoiceScreen()),
+    );
+  }
+  
   String _formatNumber(double number) {
     if (number == 0) return '0';
     final formatter = NumberFormat.decimalPattern('ar');
@@ -792,6 +819,18 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
                 ]),
               ),
             ],
+            const SizedBox(height: 8),
+            ElevatedButton.icon(
+              onPressed: _showFinalInvoice,
+              icon: const Icon(Icons.receipt),
+              label: const Text('عرض الفاتورة النهائية', style: TextStyle(fontSize: 16)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.purple,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
           ],
         ),
       ),
