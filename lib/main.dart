@@ -1,9 +1,6 @@
-import 'dart:convert';
+// lib/main.dart
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'accounting_table_screen.dart';
-import 'support_screen.dart';
-import 'final_invoice_screen.dart';
+import 'main_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -50,7 +47,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     if (mounted) {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => const AccountingTableScreen()),
+        MaterialPageRoute(builder: (context) => const MainScreen()),
       );
     }
   }
@@ -77,14 +74,14 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                width: 100,
-                height: 100,
+                width: 120,
+                height: 120,
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.9),
+                  color: Colors.white.withValues(alpha: 0.9),
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
+                      color: Colors.black.withValues(alpha: 0.2),
                       blurRadius: 20,
                       spreadRadius: 5,
                     ),
@@ -92,7 +89,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                 ),
                 child: const Icon(
                   Icons.account_balance,
-                  size: 60,
+                  size: 70,
                   color: Colors.teal,
                 ),
               ),
@@ -101,11 +98,11 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                 margin: const EdgeInsets.symmetric(horizontal: 30),
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.95),
+                  color: Colors.white.withValues(alpha: 0.95),
                   borderRadius: BorderRadius.circular(24),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
+                      color: Colors.black.withValues(alpha: 0.1),
                       blurRadius: 15,
                       spreadRadius: 5,
                     ),
@@ -119,7 +116,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                         fontSize: 32,
                         fontWeight: FontWeight.bold,
                         color: Colors.teal.shade800,
-                        fontFamily: 'Arial',
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -130,7 +126,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                         fontSize: 28,
                         fontWeight: FontWeight.bold,
                         color: Colors.teal.shade600,
-                        fontFamily: 'Arial',
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -147,7 +142,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                           fontSize: 18,
                           color: Colors.teal.shade800,
                           fontWeight: FontWeight.w500,
-                          fontFamily: 'Arial',
                         ),
                         textAlign: TextAlign.center,
                       ),
@@ -156,7 +150,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                 ),
               ),
               const SizedBox(height: 50),
-              CircularProgressIndicator(
+              const CircularProgressIndicator(
                 valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                 strokeWidth: 3,
               ),
@@ -165,7 +159,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                 'جاري التحميل...',
                 style: TextStyle(
                   fontSize: 16,
-                  color: Colors.white.withOpacity(0.9),
+                  color: Colors.white.withValues(alpha: 0.9),
                 ),
               ),
             ],
