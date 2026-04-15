@@ -38,11 +38,4 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  
-  # إضافة الخط العربي Cairo لاستخدامه في ملفات PDF
-  fonts:
-    - family: Cairo
-      fonts:
-        - asset: assets/fonts/Cairo-Regular.ttf
-        - asset: assets/fonts/Cairo-Bold.ttf
-          weight: 700
+  # تم إزالة تعريف الخطوط مؤقتاً
