@@ -1,8 +1,6 @@
 name: market_ledger
-description: "A new Flutter project."
-
-publish_to: 'none' 
-
+description: "برنامج أبو ماهر للحسابات - قسم الفرشات والمساند"
+publish_to: 'none'
 version: 1.0.0+1
 
 environment:
@@ -19,15 +17,15 @@ dependencies:
   cupertino_icons: ^1.0.8
   provider: ^6.1.5+1
   
-  # Date handling (مرة واحدة فقط)
+  # Date handling
   intl: ^0.19.0
   
   # Local storage
   path_provider: ^2.1.5
   
   # PDF & Sharing
-  pdf: ^3.10.4
-  share_plus: ^7.1.0
+  pdf: ^3.11.1
+  share_plus: ^10.1.2
   
   # ZIP & File
   archive: ^3.4.10
@@ -37,6 +35,14 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^2.0.0
-  
+
 flutter:
   uses-material-design: true
+  
+  # إضافة الخط العربي Cairo لاستخدامه في ملفات PDF
+  fonts:
+    - family: Cairo
+      fonts:
+        - asset: assets/fonts/Cairo-Regular.ttf
+        - asset: assets/fonts/Cairo-Bold.ttf
+          weight: 700

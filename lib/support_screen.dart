@@ -2,6 +2,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -561,52 +562,69 @@ class _SupportScreenState extends State<SupportScreen> {
     try {
       final pdf = pw.Document();
       
+      final fontData = await rootBundle.load('assets/fonts/Cairo-Regular.ttf');
+      final fontBoldData = await rootBundle.load('assets/fonts/Cairo-Bold.ttf');
+      final ttf = pw.Font.ttf(fontData);
+      final ttfBold = pw.Font.ttf(fontBoldData);
+      
       pdf.addPage(
         pw.MultiPage(
+          textDirection: pw.TextDirection.rtl,
           build: (context) => [
-            pw.Header(level: 0, child: pw.Text('قسم المساند - فاتورة', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold))),
+            pw.Header(
+              level: 0,
+              child: pw.Text('قسم المساند - فاتورة',
+                style: pw.TextStyle(font: ttfBold, fontSize: 24)
+              )
+            ),
             pw.SizedBox(height: 10),
-            pw.Text('التاريخ: $currentDate', style: pw.TextStyle(fontSize: 12)),
-            pw.Text('نوع المسند: ${selectedSupportType?.name ?? "غير محدد"} (${selectedSupportType?.price ?? 0} \$/م³)', style: pw.TextStyle(fontSize: 12)),
-            pw.Text('سعر الدولار: ${dollarPrice > 0 ? _formatNumber(dollarPrice) : "لم يتم إدخاله"} ل.س', style: pw.TextStyle(fontSize: 12)),
+            pw.Text('التاريخ: $currentDate',
+              style: pw.TextStyle(font: ttf, fontSize: 12)
+            ),
+            pw.Text('نوع المسند: ${selectedSupportType?.name ?? "غير محدد"} (${selectedSupportType?.price ?? 0} \$/م³)',
+              style: pw.TextStyle(font: ttf, fontSize: 12)
+            ),
+            pw.Text('سعر الدولار: ${dollarPrice > 0 ? _formatNumber(dollarPrice) : "لم يتم إدخاله"} ل.س',
+              style: pw.TextStyle(font: ttf, fontSize: 12)
+            ),
             pw.SizedBox(height: 20),
             pw.Table(
               border: pw.TableBorder.all(),
               children: [
                 pw.TableRow(children: [
-                  pw.Text('العمود', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                  pw.Text('الطول (سم)', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                  pw.Text('السماكة (سم)', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                  pw.Text('الارتفاع (سم)', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                  pw.Text('العدد', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                  pw.Text('الخصم %', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                  pw.Text('الإجمالي (\$)', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                  pw.Text('العمود', style: pw.TextStyle(font: ttfBold)),
+                  pw.Text('الطول (سم)', style: pw.TextStyle(font: ttfBold)),
+                  pw.Text('السماكة (سم)', style: pw.TextStyle(font: ttfBold)),
+                  pw.Text('الارتفاع (سم)', style: pw.TextStyle(font: ttfBold)),
+                  pw.Text('العدد', style: pw.TextStyle(font: ttfBold)),
+                  pw.Text('الخصم %', style: pw.TextStyle(font: ttfBold)),
+                  pw.Text('الإجمالي (\$)', style: pw.TextStyle(font: ttfBold)),
                 ]),
                 for (var col in columns)
                   pw.TableRow(children: [
-                    pw.Text(col.name),
-                    pw.Text(col.lengthCM.toString()),
-                    pw.Text(col.thicknessCM.toString()),
-                    pw.Text(col.heightController.text.isEmpty ? '0' : col.heightController.text),
-                    pw.Text(col.quantityController.text.isEmpty ? '1' : col.quantityController.text),
-                    pw.Text(col.discountController.text.isEmpty ? '0' : col.discountController.text),
-                    pw.Text(calculateTotalUSD(col).toStringAsFixed(2)),
+                    pw.Text(col.name, style: pw.TextStyle(font: ttf)),
+                    pw.Text(col.lengthCM.toString(), style: pw.TextStyle(font: ttf)),
+                    pw.Text(col.thicknessCM.toString(), style: pw.TextStyle(font: ttf)),
+                    pw.Text(col.heightController.text.isEmpty ? '0' : col.heightController.text, style: pw.TextStyle(font: ttf)),
+                    pw.Text(col.quantityController.text.isEmpty ? '1' : col.quantityController.text, style: pw.TextStyle(font: ttf)),
+                    pw.Text(col.discountController.text.isEmpty ? '0' : col.discountController.text, style: pw.TextStyle(font: ttf)),
+                    pw.Text(calculateTotalUSD(col).toStringAsFixed(2), style: pw.TextStyle(font: ttf)),
                   ]),
               ],
             ),
             pw.SizedBox(height: 20),
             pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-              pw.Text('إجمالي الحجم:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-              pw.Text('${_formatNumber(getTotalVolume())}'),
+              pw.Text('إجمالي الحجم:', style: pw.TextStyle(font: ttfBold)),
+              pw.Text('${_formatNumber(getTotalVolume())}', style: pw.TextStyle(font: ttf)),
             ]),
             pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-              pw.Text('الإجمالي بالدولار:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-              pw.Text('\$${_formatNumber(getGrandTotalUSD())}'),
+              pw.Text('الإجمالي بالدولار:', style: pw.TextStyle(font: ttfBold)),
+              pw.Text('\$${_formatNumber(getGrandTotalUSD())}', style: pw.TextStyle(font: ttf)),
             ]),
             if (dollarPrice > 0)
               pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-                pw.Text('الإجمالي بالليرة:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                pw.Text('${_formatNumber(getGrandTotalSYP())} ل.س'),
+                pw.Text('الإجمالي بالليرة:', style: pw.TextStyle(font: ttfBold)),
+                pw.Text('${_formatNumber(getGrandTotalSYP())} ل.س', style: pw.TextStyle(font: ttf)),
               ]),
           ],
         ),
@@ -646,16 +664,6 @@ class _SupportScreenState extends State<SupportScreen> {
         foregroundColor: Colors.white,
         centerTitle: true,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (context) => const AccountingTableScreen()),
-              );
-            },
-            tooltip: 'الرجوع إلى قسم الفرشات',
-          ),
           IconButton(icon: const Icon(Icons.delete_sweep), onPressed: _clearAllData, tooltip: 'مسح الكل'),
           IconButton(icon: const Icon(Icons.add_box), onPressed: _addCustomColumn, tooltip: 'إضافة عمود جديد'),
           IconButton(icon: const Icon(Icons.share), onPressed: _sharePDF, tooltip: 'مشاركة الفاتورة'),
@@ -817,16 +825,41 @@ class _SupportScreenState extends State<SupportScreen> {
               ),
             ],
             const SizedBox(height: 8),
-            ElevatedButton.icon(
-              onPressed: _showFinalInvoice,
-              icon: const Icon(Icons.receipt),
-              label: const Text('عرض الفاتورة النهائية', style: TextStyle(fontSize: 16)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.purple,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(builder: (context) => const AccountingTableScreen()),
+                      );
+                    },
+                    icon: const Icon(Icons.arrow_back),
+                    label: const Text('الرجوع إلى قسم الفرشات'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.teal,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _showFinalInvoice,
+                    icon: const Icon(Icons.receipt),
+                    label: const Text('عرض الفاتورة النهائية'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.purple,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

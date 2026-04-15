@@ -2,6 +2,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -446,8 +447,6 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
     return sum;
   }
   
-  // ==================== دوال لجلب البيانات للفاتورة ====================
-  
   List<InvoiceItem> getInvoiceItems() {
     List<InvoiceItem> items = [];
     for (var col in columns) {
@@ -480,8 +479,6 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
   double getCurrentDollarPrice() {
     return dollarPrice;
   }
-  
-  // ==================== نهاية دوال الفاتورة ====================
   
   void _showFinalInvoice() async {
     final prefs = await SharedPreferences.getInstance();
@@ -564,52 +561,69 @@ class _AccountingTableScreenState extends State<AccountingTableScreen> {
     try {
       final pdf = pw.Document();
       
+      final fontData = await rootBundle.load('assets/fonts/Cairo-Regular.ttf');
+      final fontBoldData = await rootBundle.load('assets/fonts/Cairo-Bold.ttf');
+      final ttf = pw.Font.ttf(fontData);
+      final ttfBold = pw.Font.ttf(fontBoldData);
+      
       pdf.addPage(
         pw.MultiPage(
+          textDirection: pw.TextDirection.rtl,
           build: (context) => [
-            pw.Header(level: 0, child: pw.Text('قسم الفرشات - فاتورة', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold))),
+            pw.Header(
+              level: 0,
+              child: pw.Text('قسم الفرشات - فاتورة',
+                style: pw.TextStyle(font: ttfBold, fontSize: 24)
+              )
+            ),
             pw.SizedBox(height: 10),
-            pw.Text('التاريخ: $currentDate', style: pw.TextStyle(fontSize: 12)),
-            pw.Text('نوع الإسفنج: ${selectedSpongeType?.name ?? "غير محدد"} (${selectedSpongeType?.price ?? 0} \$/م³)', style: pw.TextStyle(fontSize: 12)),
-            pw.Text('سعر الدولار: ${dollarPrice > 0 ? _formatNumber(dollarPrice) : "لم يتم إدخاله"} ل.س', style: pw.TextStyle(fontSize: 12)),
+            pw.Text('التاريخ: $currentDate',
+              style: pw.TextStyle(font: ttf, fontSize: 12)
+            ),
+            pw.Text('نوع الإسفنج: ${selectedSpongeType?.name ?? "غير محدد"} (${selectedSpongeType?.price ?? 0} \$/م³)',
+              style: pw.TextStyle(font: ttf, fontSize: 12)
+            ),
+            pw.Text('سعر الدولار: ${dollarPrice > 0 ? _formatNumber(dollarPrice) : "لم يتم إدخاله"} ل.س',
+              style: pw.TextStyle(font: ttf, fontSize: 12)
+            ),
             pw.SizedBox(height: 20),
             pw.Table(
               border: pw.TableBorder.all(),
               children: [
                 pw.TableRow(children: [
-                  pw.Text('العمود', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                  pw.Text('الطول (سم)', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                  pw.Text('العرض (سم)', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                  pw.Text('الارتفاع (سم)', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                  pw.Text('العدد', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                  pw.Text('الخصم %', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                  pw.Text('الإجمالي (\$)', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                  pw.Text('العمود', style: pw.TextStyle(font: ttfBold)),
+                  pw.Text('الطول (سم)', style: pw.TextStyle(font: ttfBold)),
+                  pw.Text('العرض (سم)', style: pw.TextStyle(font: ttfBold)),
+                  pw.Text('الارتفاع (سم)', style: pw.TextStyle(font: ttfBold)),
+                  pw.Text('العدد', style: pw.TextStyle(font: ttfBold)),
+                  pw.Text('الخصم %', style: pw.TextStyle(font: ttfBold)),
+                  pw.Text('الإجمالي (\$)', style: pw.TextStyle(font: ttfBold)),
                 ]),
                 for (var col in columns)
                   pw.TableRow(children: [
-                    pw.Text(col.name),
-                    pw.Text(col.lengthCM.toString()),
-                    pw.Text(col.widthCM.toString()),
-                    pw.Text(col.heightCMController.text.isEmpty ? '0' : col.heightCMController.text),
-                    pw.Text(col.quantityController.text.isEmpty ? '1' : col.quantityController.text),
-                    pw.Text(col.discountController.text.isEmpty ? '0' : col.discountController.text),
-                    pw.Text(calculateTotalUSD(col).toStringAsFixed(2)),
+                    pw.Text(col.name, style: pw.TextStyle(font: ttf)),
+                    pw.Text(col.lengthCM.toString(), style: pw.TextStyle(font: ttf)),
+                    pw.Text(col.widthCM.toString(), style: pw.TextStyle(font: ttf)),
+                    pw.Text(col.heightCMController.text.isEmpty ? '0' : col.heightCMController.text, style: pw.TextStyle(font: ttf)),
+                    pw.Text(col.quantityController.text.isEmpty ? '1' : col.quantityController.text, style: pw.TextStyle(font: ttf)),
+                    pw.Text(col.discountController.text.isEmpty ? '0' : col.discountController.text, style: pw.TextStyle(font: ttf)),
+                    pw.Text(calculateTotalUSD(col).toStringAsFixed(2), style: pw.TextStyle(font: ttf)),
                   ]),
               ],
             ),
             pw.SizedBox(height: 20),
             pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-              pw.Text('إجمالي الحجم:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-              pw.Text('${_formatNumber(getTotalVolume())}'),
+              pw.Text('إجمالي الحجم:', style: pw.TextStyle(font: ttfBold)),
+              pw.Text('${_formatNumber(getTotalVolume())}', style: pw.TextStyle(font: ttf)),
             ]),
             pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-              pw.Text('الإجمالي بالدولار:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-              pw.Text('\$${_formatNumber(getGrandTotalUSD())}'),
+              pw.Text('الإجمالي بالدولار:', style: pw.TextStyle(font: ttfBold)),
+              pw.Text('\$${_formatNumber(getGrandTotalUSD())}', style: pw.TextStyle(font: ttf)),
             ]),
             if (dollarPrice > 0)
               pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-                pw.Text('الإجمالي بالليرة:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                pw.Text('${_formatNumber(getGrandTotalSYP())} ل.س'),
+                pw.Text('الإجمالي بالليرة:', style: pw.TextStyle(font: ttfBold)),
+                pw.Text('${_formatNumber(getGrandTotalSYP())} ل.س', style: pw.TextStyle(font: ttf)),
               ]),
           ],
         ),

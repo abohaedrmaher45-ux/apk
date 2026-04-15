@@ -2,6 +2,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -368,55 +369,66 @@ class _FinalInvoiceScreenState extends State<FinalInvoiceScreen> {
 
     try {
       final pdf = pw.Document();
+      
+      final fontData = await rootBundle.load('assets/fonts/Cairo-Regular.ttf');
+      final fontBoldData = await rootBundle.load('assets/fonts/Cairo-Bold.ttf');
+      final ttf = pw.Font.ttf(fontData);
+      final ttfBold = pw.Font.ttf(fontBoldData);
 
       pdf.addPage(
         pw.MultiPage(
+          textDirection: pw.TextDirection.rtl,
           build: (context) => [
-            pw.Header(level: 0, child: pw.Text('الفاتورة النهائية', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold))),
+            pw.Header(
+              level: 0,
+              child: pw.Text('الفاتورة النهائية',
+                style: pw.TextStyle(font: ttfBold, fontSize: 24)
+              )
+            ),
             pw.SizedBox(height: 10),
-            pw.Text('التاريخ: $currentDate', style: pw.TextStyle(fontSize: 12)),
-            pw.Text('نوع إسفنج الفرشات: $mattressType', style: pw.TextStyle(fontSize: 12)),
-            pw.Text('نوع مسند المساند: $supportType', style: pw.TextStyle(fontSize: 12)),
-            pw.Text('سعر دولار الفرشات: ${_formatNumber(mattressDollarPrice)} ل.س', style: pw.TextStyle(fontSize: 12)),
-            pw.Text('سعر دولار المساند: ${_formatNumber(supportDollarPrice)} ل.س', style: pw.TextStyle(fontSize: 12)),
+            pw.Text('التاريخ: $currentDate', style: pw.TextStyle(font: ttf, fontSize: 12)),
+            pw.Text('نوع إسفنج الفرشات: $mattressType', style: pw.TextStyle(font: ttf, fontSize: 12)),
+            pw.Text('نوع مسند المساند: $supportType', style: pw.TextStyle(font: ttf, fontSize: 12)),
+            pw.Text('سعر دولار الفرشات: ${_formatNumber(mattressDollarPrice)} ل.س', style: pw.TextStyle(font: ttf, fontSize: 12)),
+            pw.Text('سعر دولار المساند: ${_formatNumber(supportDollarPrice)} ل.س', style: pw.TextStyle(font: ttf, fontSize: 12)),
             pw.SizedBox(height: 20),
             pw.Table(
               border: pw.TableBorder.all(),
               children: [
                 pw.TableRow(children: [
-                  pw.Text('القسم', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                  pw.Text('النوع', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                  pw.Text('الأبعاد', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                  pw.Text('الارتفاع', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                  pw.Text('العدد', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                  pw.Text('الخصم %', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                  pw.Text('الإجمالي (\$)', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                  pw.Text('القسم', style: pw.TextStyle(font: ttfBold)),
+                  pw.Text('النوع', style: pw.TextStyle(font: ttfBold)),
+                  pw.Text('الأبعاد', style: pw.TextStyle(font: ttfBold)),
+                  pw.Text('الارتفاع', style: pw.TextStyle(font: ttfBold)),
+                  pw.Text('العدد', style: pw.TextStyle(font: ttfBold)),
+                  pw.Text('الخصم %', style: pw.TextStyle(font: ttfBold)),
+                  pw.Text('الإجمالي (\$)', style: pw.TextStyle(font: ttfBold)),
                 ]),
                 for (var item in allItems)
                   pw.TableRow(children: [
-                    pw.Text(item.section),
-                    pw.Text(item.type),
-                    pw.Text(item.dimensions),
-                    pw.Text(item.height.toString()),
-                    pw.Text(item.quantity.toString()),
-                    pw.Text(item.discount.toString()),
-                    pw.Text(item.totalUSD.toStringAsFixed(2)),
+                    pw.Text(item.section, style: pw.TextStyle(font: ttf)),
+                    pw.Text(item.type, style: pw.TextStyle(font: ttf)),
+                    pw.Text(item.dimensions, style: pw.TextStyle(font: ttf)),
+                    pw.Text(item.height.toString(), style: pw.TextStyle(font: ttf)),
+                    pw.Text(item.quantity.toString(), style: pw.TextStyle(font: ttf)),
+                    pw.Text(item.discount.toString(), style: pw.TextStyle(font: ttf)),
+                    pw.Text(item.totalUSD.toStringAsFixed(2), style: pw.TextStyle(font: ttf)),
                   ]),
               ],
             ),
             pw.SizedBox(height: 20),
             pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-              pw.Text('إجمالي الفرشات:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-              pw.Text('\$${_formatNumber(mattressTotalUSD)}  /  ${_formatNumber(mattressTotalSYP)} ل.س'),
+              pw.Text('إجمالي الفرشات:', style: pw.TextStyle(font: ttfBold)),
+              pw.Text('\$${_formatNumber(mattressTotalUSD)}  /  ${_formatNumber(mattressTotalSYP)} ل.س', style: pw.TextStyle(font: ttf)),
             ]),
             pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-              pw.Text('إجمالي المساند:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-              pw.Text('\$${_formatNumber(supportTotalUSD)}  /  ${_formatNumber(supportTotalSYP)} ل.س'),
+              pw.Text('إجمالي المساند:', style: pw.TextStyle(font: ttfBold)),
+              pw.Text('\$${_formatNumber(supportTotalUSD)}  /  ${_formatNumber(supportTotalSYP)} ل.س', style: pw.TextStyle(font: ttf)),
             ]),
             pw.Divider(),
             pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-              pw.Text('الإجمالي النهائي:', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
-              pw.Text('\$${_formatNumber(grandTotalUSD)}  /  ${_formatNumber(grandTotalSYP)} ل.س'),
+              pw.Text('الإجمالي النهائي:', style: pw.TextStyle(font: ttfBold, fontSize: 16)),
+              pw.Text('\$${_formatNumber(grandTotalUSD)}  /  ${_formatNumber(grandTotalSYP)} ل.س', style: pw.TextStyle(font: ttf)),
             ]),
           ],
         ),
