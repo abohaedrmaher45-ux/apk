@@ -1,6 +1,8 @@
-name: ابو ماهر
-description: "برنامج أبو ماهر للحسابات - قسم الفرشات والمساند"
-publish_to: 'none'
+name: market_ledger
+description: "A new Flutter project."
+
+publish_to: 'none' 
+
 version: 1.0.0+1
 
 environment:
@@ -9,32 +11,33 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  
-  flutter_secure_storage: ^9.2.2
-  shared_preferences: ^2.5.3
-  device_info_plus: ^10.1.2
-  http: ^1.2.2
-  cupertino_icons: ^1.0.8
-  provider: ^6.1.5+1
-  intl: ^0.19.0
-  path_provider: ^2.1.5
-  pdf: ^3.11.1
-  share_plus: ^10.1.2
-  archive: ^3.4.10
-  file_picker: ^8.0.3
 
+  cupertino_icons: ^1.0.8
+  
+  # State Management
+  provider: 6.1.5+1
+
+  # Date handling
+  intl: ^0.19.0
+  
+  # Local storage for settings
+  path_provider: 2.1.5
+  shared_preferences: 2.5.3
+
+   # مكتبات الأمان والحماية
+  device_info_plus: 10.1.2
+
+  http: ^1.1.0  # لإجراء طلبات الشبكة
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^2.0.0
-  flutter_launcher_icons: ^0.14.3  # أضف هذا السطر
 
+  flutter_lints: ^2.0.0
+  
 flutter:
   uses-material-design: true
 
-# إعدادات الأيقونة الجديدة
+# 👇 قسم أيقونة التطبيق
 flutter_launcher_icons:
   android: true
-  ios: true
-  image_path: "assets/icon/app_icon.png"
-  min_sdk_android: 21
+  
