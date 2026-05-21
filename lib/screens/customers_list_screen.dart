@@ -37,41 +37,149 @@ class _CustomersListScreenState extends State<CustomersListScreen> {
     return customers.where((c) => c.name.contains(searchQuery)).toList();
   }
 
-  Future<void> _deleteCustomer(Customer customer) async {
-    final confirmed = await showDialog<bool>(
+  Future<void> _editCustomer(Customer customer) async {
+    final nameController = TextEditingController(text: customer.name);
+    final phoneController = TextEditingController(text: customer.phone ?? '');
+    
+    final result = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('حذف عميل'),
-        content: Text('هل أنت متأكد من حذف "${customer.name}"؟ سيتم حذف جميع فواتيره أيضاً.'),
+        title: const Text('تعديل عميل'),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              decoration: const InputDecoration(labelText: 'الاسم'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: phoneController,
+              decoration: const InputDecoration(labelText: 'رقم الهاتف'),
+              keyboardType: TextInputType.phone,
+            ),
+          ],
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('إلغاء', style: TextStyle(color: Colors.grey)),
+            child: const Text('إلغاء'),
           ),
-          TextButton(
+          ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('حذف', style: TextStyle(color: AppConstants.dangerColor)),
+            child: const Text('حفظ'),
           ),
         ],
       ),
     );
     
-    if (confirmed == true) {
-      setState(() => isLoading = true);
-      await storage.deleteCustomer(customer.id);
+    if (result == true) {
+      final updatedCustomer = Customer(
+        id: customer.id,
+        name: nameController.text.trim(),
+        phone: phoneController.text.trim().isEmpty ? null : phoneController.text.trim(),
+        createdAt: customer.createdAt,
+      );
+      await storage.updateCustomer(updatedCustomer);
       await _loadCustomers();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('✅ تم حذف ${customer.name}'),
-            backgroundColor: AppConstants.successColor,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
+          const SnackBar(content: Text('✅ تم تعديل العميل بنجاح')),
         );
       }
     }
+  }
+
+  Widget _buildCustomerTile(Customer customer) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.shade200,
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(20),
+        child: InkWell(
+          onTap: () => Navigator.pushNamed(
+            context,
+            '/customer_details',
+            arguments: customer.id,
+          ),
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                // Avatar
+                Container(
+                  width: 50,
+                  height: 50,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [AppConstants.primaryColor, Color(0xFF3A5F8F)],
+                    ),
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                  child: Center(
+                    child: Text(
+                      customer.name.isNotEmpty ? customer.name[0] : '?',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                // المعلومات
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        customer.name,
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                      if (customer.phone != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          customer.phone!,
+                          style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                // الأزرار
+                Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.receipt, color: AppConstants.successColor),
+                      onPressed: () => Navigator.pushNamed(
+                        context,
+                        '/return_invoice',
+                        arguments: customer.id,
+                      ),
+                      tooltip: 'فاتورة إرجاع',
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -135,98 +243,71 @@ class _CustomersListScreenState extends State<CustomersListScreen> {
                         itemCount: filteredCustomers.length,
                         itemBuilder: (context, index) {
                           final customer = filteredCustomers[index];
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 12),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(20),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.grey.shade200,
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: Material(
-                              color: Colors.transparent,
-                              borderRadius: BorderRadius.circular(20),
-                              child: InkWell(
-                                onTap: () => Navigator.pushNamed(
-                                  context,
-                                  '/customer_details',
-                                  arguments: customer.id,
-                                ),
+                          return Dismissible(
+                            key: Key(customer.id.toString()),
+                            direction: DismissDirection.endToStart,
+                            background: Container(
+                              margin: const EdgeInsets.only(bottom: 12),
+                              decoration: BoxDecoration(
+                                color: Colors.red,
                                 borderRadius: BorderRadius.circular(20),
-                                child: Container(
-                                  padding: const EdgeInsets.all(12),
-                                  child: Row(
-                                    children: [
-                                      // Avatar
-                                      Container(
-                                        width: 50,
-                                        height: 50,
-                                        decoration: BoxDecoration(
-                                          gradient: const LinearGradient(
-                                            colors: [AppConstants.primaryColor, Color(0xFF3A5F8F)],
-                                          ),
-                                          borderRadius: BorderRadius.circular(15),
-                                        ),
-                                        child: Center(
-                                          child: Text(
-                                            customer.name.isNotEmpty ? customer.name[0] : '?',
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 20,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ),
+                              ),
+                              alignment: Alignment.centerRight,
+                              padding: const EdgeInsets.only(right: 20),
+                              child: const Icon(Icons.delete, color: Colors.white),
+                            ),
+                            secondaryBackground: Container(
+                              margin: const EdgeInsets.only(bottom: 12),
+                              decoration: BoxDecoration(
+                                color: Colors.blue,
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              alignment: Alignment.centerLeft,
+                              padding: const EdgeInsets.only(left: 20),
+                              child: const Icon(Icons.edit, color: Colors.white),
+                            ),
+                            confirmDismiss: (direction) async {
+                              if (direction == DismissDirection.endToStart) {
+                                final confirmed = await showDialog<bool>(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    title: const Text('حذف عميل'),
+                                    content: Text('هل أنت متأكد من حذف "${customer.name}"؟ سيتم حذف جميع فواتيره أيضاً.'),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(context, false),
+                                        child: const Text('إلغاء', style: TextStyle(color: Colors.grey)),
                                       ),
-                                      const SizedBox(width: 12),
-                                      // المعلومات
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              customer.name,
-                                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                                            ),
-                                            if (customer.phone != null) ...[
-                                              const SizedBox(height: 4),
-                                              Text(
-                                                customer.phone!,
-                                                style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
-                                              ),
-                                            ],
-                                          ],
-                                        ),
-                                      ),
-                                      // الأزرار
-                                      Row(
-                                        children: [
-                                          IconButton(
-                                            icon: const Icon(Icons.receipt, color: AppConstants.successColor),
-                                            onPressed: () => Navigator.pushNamed(
-                                              context,
-                                              '/return_invoice',
-                                              arguments: customer.id,
-                                            ),
-                                            tooltip: 'فاتورة إرجاع',
-                                          ),
-                                          IconButton(
-                                            icon: const Icon(Icons.delete, color: AppConstants.dangerColor),
-                                            onPressed: () => _deleteCustomer(customer),
-                                            tooltip: 'حذف',
-                                          ),
-                                        ],
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(context, true),
+                                        child: const Text('حذف', style: TextStyle(color: AppConstants.dangerColor)),
                                       ),
                                     ],
                                   ),
-                                ),
-                              ),
-                            ),
+                                );
+                                if (confirmed == true) {
+                                  setState(() => isLoading = true);
+                                  await storage.deleteCustomer(customer.id);
+                                  await _loadCustomers();
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('✅ تم حذف ${customer.name}'),
+                                        backgroundColor: AppConstants.successColor,
+                                        behavior: SnackBarBehavior.floating,
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                      ),
+                                    );
+                                  }
+                                }
+                                return false;
+                              } else {
+                                await _editCustomer(customer);
+                                return false;
+                              }
+                            },
+                            child: _buildCustomerTile(customer),
                           );
                         },
                       ),

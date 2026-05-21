@@ -1,6 +1,7 @@
 // lib/main.dart
 import 'package:flutter/material.dart';
 import 'services/storage_service.dart';
+import 'services/notification_service.dart';
 import 'utils/app_theme.dart';
 import 'screens/splash_screen.dart';
 import 'screens/home_screen.dart';
@@ -8,10 +9,18 @@ import 'screens/customers_list_screen.dart';
 import 'screens/customer_details_screen.dart';
 import 'screens/return_invoice_screen.dart';
 import 'screens/edit_transaction_screen.dart';
+import 'screens/advanced_search_screen.dart';
+import 'screens/settings_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // تهيئة خدمات التخزين
   await StorageService.instance.init();
+  
+  // تهيئة خدمة الإشعارات
+  await NotificationService().init();
+  
   runApp(const ConstructionLedgerApp());
 }
 
@@ -21,7 +30,7 @@ class ConstructionLedgerApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'سجل العجاج',
+      title: 'شركة العجاج للمقاولات',
       theme: AppTheme.lightTheme,
       debugShowCheckedModeBanner: false,
       locale: const Locale('ar', 'EG'),
@@ -40,6 +49,8 @@ class ConstructionLedgerApp extends StatelessWidget {
         '/edit_transaction': (context) => EditTransactionScreen(
               transactionId: ModalRoute.of(context)!.settings.arguments as int,
             ),
+        '/advanced_search': (context) => const AdvancedSearchScreen(),
+        '/settings': (context) => const SettingsScreen(),
       },
     );
   }

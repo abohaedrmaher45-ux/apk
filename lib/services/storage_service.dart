@@ -1,9 +1,12 @@
 // lib/services/storage_service.dart
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
 import '../models/customer.dart';
 import '../models/transaction.dart';
+import '../models/statistics.dart';
 
 class StorageService {
   static const String _customersKey = 'customers';
@@ -34,7 +37,7 @@ class StorageService {
     }
   }
 
-  // ========== العملاء ==========
+  // ==================== العملاء ====================
   
   Future<List<Customer>> getCustomers() async {
     _checkInitialized();
@@ -100,7 +103,7 @@ class StorageService {
     }
   }
 
-  // ========== المعاملات ==========
+  // ==================== المعاملات ====================
   
   Future<List<Transaction>> getTransactions() async {
     _checkInitialized();
@@ -202,6 +205,124 @@ class StorageService {
       return transactions.firstWhere((t) => t.id == id);
     } catch (e) {
       return null;
+    }
+  }
+
+  // ==================== الإحصائيات ====================
+  
+  Future<Statistics> getStatistics() async {
+    final customers = await getCustomers();
+    final transactions = await getTransactions();
+    
+    double totalRevenue = 0;
+    final Map<String, double> monthlySales = {};
+    final Map<int, double> customerSpending = {};
+    final Map<int, int> customerTransactions = {};
+    
+    for (var t in transactions) {
+      if (t.type == TransactionType.withdrawal) {
+        totalRevenue += t.totalAfterDiscount;
+        
+        final month = t.date.substring(0, 7);
+        monthlySales[month] = (monthlySales[month] ?? 0) + t.totalAfterDiscount;
+        
+        customerSpending[t.customerId] = (customerSpending[t.customerId] ?? 0) + t.totalAfterDiscount;
+        customerTransactions[t.customerId] = (customerTransactions[t.customerId] ?? 0) + 1;
+      }
+    }
+    
+    final List<TopCustomer> topCustomers = [];
+    for (var customer in customers) {
+      if ((customerTransactions[customer.id] ?? 0) > 0) {
+        topCustomers.add(TopCustomer(
+          name: customer.name,
+          transactionsCount: customerTransactions[customer.id] ?? 0,
+          totalSpent: customerSpending[customer.id] ?? 0,
+        ));
+      }
+    }
+    topCustomers.sort((a, b) => b.totalSpent.compareTo(a.totalSpent));
+    
+    return Statistics(
+      totalCustomers: customers.length,
+      totalTransactions: transactions.length,
+      totalRevenue: totalRevenue,
+      monthlySales: monthlySales,
+      topCustomers: topCustomers.take(5).toList(),
+    );
+  }
+
+  // ==================== التحميل التدريجي والفلاتر ====================
+  
+  Future<List<Transaction>> getTransactionsPaginated({
+    int limit = 20,
+    int offset = 0,
+    TransactionFilter? filter,
+  }) async {
+    var transactions = await getTransactions();
+    
+    if (filter != null && filter.hasFilters) {
+      transactions = transactions.where((t) {
+        if (filter.startDate != null) {
+          final filterDate = filter.startDate!.toIso8601String().substring(0, 10);
+          if (t.date.compareTo(filterDate) < 0) return false;
+        }
+        if (filter.endDate != null) {
+          final filterDate = filter.endDate!.toIso8601String().substring(0, 10);
+          if (t.date.compareTo(filterDate) > 0) return false;
+        }
+        if (filter.materialName != null && t.materialName != filter.materialName) return false;
+        if (filter.type != null && t.type != filter.type) return false;
+        return true;
+      }).toList();
+    }
+    
+    transactions.sort((a, b) => b.date.compareTo(a.date));
+    
+    return transactions.skip(offset).take(limit).toList();
+  }
+
+  // ==================== النسخ الاحتياطي ====================
+  
+  Future<String> backupData() async {
+    final customers = await getCustomers();
+    final transactions = await getTransactions();
+    
+    final backupData = {
+      'version': '1.0',
+      'exportDate': DateTime.now().toIso8601String(),
+      'customers': customers.map((c) => c.toJson()).toList(),
+      'transactions': transactions.map((t) => t.toJson()).toList(),
+    };
+    
+    final jsonString = jsonEncode(backupData);
+    final directory = await getApplicationDocumentsDirectory();
+    final fileName = 'backup_${DateTime.now().millisecondsSinceEpoch}.json';
+    final file = File('${directory.path}/$fileName');
+    await file.writeAsString(jsonString);
+    
+    return file.path;
+  }
+  
+  Future<bool> restoreData(String filePath) async {
+    try {
+      final file = File(filePath);
+      final jsonString = await file.readAsString();
+      final backupData = jsonDecode(jsonString);
+      
+      final customers = (backupData['customers'] as List)
+          .map((json) => Customer.fromJson(json))
+          .toList();
+      final transactions = (backupData['transactions'] as List)
+          .map((json) => Transaction.fromJson(json))
+          .toList();
+      
+      await _saveCustomers(customers);
+      await _saveTransactions(transactions);
+      
+      return true;
+    } catch (e) {
+      return false;
     }
   }
 }

@@ -5,7 +5,11 @@ import 'package:fluttertoast/fluttertoast.dart';
 import '../services/storage_service.dart';
 import '../models/customer.dart';
 import '../models/transaction.dart';
+import '../models/statistics.dart';
 import '../utils/app_constants.dart';
+import '../widgets/statistics_card.dart';
+import '../screens/advanced_search_screen.dart';
+import '../screens/settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -39,12 +43,15 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   
   List<Customer> customers = [];
   bool isLoading = false;
+  Statistics? _statistics;
+  bool _isLoadingStats = true;
   late AnimationController _animationController;
 
   @override
   void initState() {
     super.initState();
     _loadCustomers();
+    _loadStatistics();
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 500),
       vsync: this,
@@ -67,6 +74,15 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Future<void> _loadCustomers() async {
     final loadedCustomers = await storage.getCustomers();
     setState(() => customers = loadedCustomers);
+  }
+
+  Future<void> _loadStatistics() async {
+    setState(() => _isLoadingStats = true);
+    final stats = await storage.getStatistics();
+    setState(() {
+      _statistics = stats;
+      _isLoadingStats = false;
+    });
   }
 
   Future<void> _saveWithdrawal() async {
@@ -135,6 +151,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       );
       
       await storage.addTransaction(transaction);
+      await _loadStatistics();
       
       if (mounted) {
         Fluttertoast.showToast(msg: '✅ تم حفظ عملية السحب بنجاح');
@@ -229,11 +246,34 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             ),
             actions: [
               IconButton(
+                icon: const Icon(Icons.search),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AdvancedSearchScreen()),
+                ),
+                tooltip: 'بحث متقدم',
+              ),
+              IconButton(
                 icon: const Icon(Icons.people_outline),
                 onPressed: () => Navigator.pushNamed(context, '/customers'),
                 tooltip: 'قائمة العملاء',
               ),
+              IconButton(
+                icon: const Icon(Icons.settings),
+                onPressed: () => Navigator.pushNamed(context, '/settings'),
+                tooltip: 'الإعدادات',
+              ),
             ],
+          ),
+          
+          // الإحصائيات
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: _isLoadingStats
+                  ? const Center(child: CircularProgressIndicator())
+                  : StatisticsCard(statistics: _statistics!),
+            ),
           ),
           
           // نموذج الإدخال
