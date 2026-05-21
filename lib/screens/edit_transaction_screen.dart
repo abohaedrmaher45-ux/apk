@@ -1,9 +1,10 @@
+// lib/screens/edit_transaction_screen.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import '../services/storage_service.dart';
 import '../models/transaction.dart';
-import '../utils/constants.dart';
+import '../utils/app_constants.dart';
 
 class EditTransactionScreen extends StatefulWidget {
   final int transactionId;
@@ -17,12 +18,13 @@ class _EditTransactionScreenState extends State<EditTransactionScreen> {
   final StorageService storage = StorageService.instance;
   final _formKey = GlobalKey<FormState>();
   Transaction? transaction;
-  String selectedMaterial = materialList[0];
+  String selectedMaterial = AppConstants.materialList[0];
   double quantity = 0;
   double pricePerUnit = 0;
   double discountPercent = 0;
   String note = '';
   DateTime? returnDate;
+  bool isLoading = true;
 
   @override
   void initState() {
@@ -31,22 +33,26 @@ class _EditTransactionScreenState extends State<EditTransactionScreen> {
   }
 
   Future<void> _loadTransaction() async {
-    final transactions = await storage.getTransactions();
-    final found = transactions.firstWhere((t) => t.id == widget.transactionId);
-    setState(() {
-      transaction = found;
-      selectedMaterial = found.materialName;
-      quantity = found.quantity;
-      pricePerUnit = found.pricePerUnit;
-      discountPercent = found.discountPercent;
-      note = found.note ?? '';
-      if (found.returnDate != null) returnDate = DateTime.parse(found.returnDate!);
-    });
+    setState(() => isLoading = true);
+    final found = await storage.getTransactionById(widget.transactionId);
+    if (found != null) {
+      setState(() {
+        transaction = found;
+        selectedMaterial = found.materialName;
+        quantity = found.quantity;
+        pricePerUnit = found.pricePerUnit;
+        discountPercent = found.discountPercent;
+        note = found.note ?? '';
+        if (found.returnDate != null) returnDate = DateTime.parse(found.returnDate!);
+      });
+    }
+    setState(() => isLoading = false);
   }
 
   Future<void> _updateTransaction() async {
     if (!_formKey.currentState!.validate()) return;
     if (transaction == null) return;
+    
     final updatedTransaction = Transaction(
       id: transaction!.id,
       customerId: transaction!.customerId,
@@ -60,9 +66,10 @@ class _EditTransactionScreenState extends State<EditTransactionScreen> {
       note: note.isEmpty ? null : note,
       linkedWithdrawalId: transaction!.linkedWithdrawalId,
     );
+    
     await storage.updateTransaction(updatedTransaction);
-    Fluttertoast.showToast(msg: 'تم التعديل بنجاح');
-    Navigator.pop(context);
+    Fluttertoast.showToast(msg: '✅ تم التعديل بنجاح');
+    if (mounted) Navigator.pop(context);
   }
 
   Future<void> _selectReturnDate() async {
@@ -77,12 +84,20 @@ class _EditTransactionScreenState extends State<EditTransactionScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (transaction == null) {
+    if (isLoading) {
       return Scaffold(
         appBar: AppBar(title: const Text('تعديل معاملة')),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
+    
+    if (transaction == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('تعديل معاملة')),
+        body: const Center(child: Text('المعاملة غير موجودة')),
+      );
+    }
+    
     return Scaffold(
       appBar: AppBar(title: Text('تعديل ${transaction!.type.name}')),
       body: SingleChildScrollView(
@@ -91,19 +106,25 @@ class _EditTransactionScreenState extends State<EditTransactionScreen> {
           key: _formKey,
           child: Column(
             children: [
+              // المادة
               DropdownButtonFormField<String>(
                 decoration: const InputDecoration(labelText: 'نوع المادة *'),
                 value: selectedMaterial,
-                items: materialList.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
+                items: AppConstants.materialList.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
                 onChanged: (value) => setState(() => selectedMaterial = value!),
               ),
               const SizedBox(height: 16),
+              
+              // الكمية والسعر
               Row(
                 children: [
                   Expanded(
                     child: TextFormField(
                       initialValue: quantity.toString(),
-                      decoration: InputDecoration(labelText: 'الكمية *', suffixText: materialUnit[selectedMaterial]),
+                      decoration: InputDecoration(
+                        labelText: 'الكمية *',
+                        suffixText: AppConstants.getUnit(selectedMaterial),
+                      ),
                       keyboardType: TextInputType.number,
                       onChanged: (value) => quantity = double.tryParse(value) ?? 0,
                       validator: (value) => (value == null || value.isEmpty) ? 'الرجاء إدخال الكمية' : null,
@@ -113,7 +134,10 @@ class _EditTransactionScreenState extends State<EditTransactionScreen> {
                   Expanded(
                     child: TextFormField(
                       initialValue: pricePerUnit.toString(),
-                      decoration: InputDecoration(labelText: 'سعر الفرد *', suffixText: currencySymbol),
+                      decoration: InputDecoration(
+                        labelText: 'سعر الفرد *',
+                        suffixText: AppConstants.currencySymbol,
+                      ),
                       keyboardType: TextInputType.number,
                       onChanged: (value) => pricePerUnit = double.tryParse(value) ?? 0,
                       validator: (value) => (value == null || value.isEmpty) ? 'الرجاء إدخال السعر' : null,
@@ -122,6 +146,8 @@ class _EditTransactionScreenState extends State<EditTransactionScreen> {
                 ],
               ),
               const SizedBox(height: 16),
+              
+              // الخصم
               TextFormField(
                 initialValue: discountPercent.toString(),
                 decoration: const InputDecoration(labelText: 'الخصم (%)'),
@@ -129,15 +155,27 @@ class _EditTransactionScreenState extends State<EditTransactionScreen> {
                 onChanged: (value) => discountPercent = double.tryParse(value) ?? 0,
               ),
               const SizedBox(height: 16),
+              
+              // تاريخ العودة (للسحب فقط)
               if (transaction!.type == TransactionType.withdrawal)
                 InkWell(
                   onTap: _selectReturnDate,
                   child: InputDecorator(
                     decoration: const InputDecoration(labelText: 'تاريخ العودة'),
-                    child: Text(returnDate != null ? DateFormat('yyyy-MM-dd').format(returnDate!) : 'اختر تاريخ'),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.calendar_today, size: 18),
+                        const SizedBox(width: 8),
+                        Text(returnDate != null ? DateFormat('yyyy-MM-dd').format(returnDate!) : 'اختر تاريخ'),
+                      ],
+                    ),
                   ),
                 ),
-              const SizedBox(height: 16),
+              
+              if (transaction!.type == TransactionType.withdrawal)
+                const SizedBox(height: 16),
+              
+              // ملاحظة
               TextFormField(
                 initialValue: note,
                 decoration: const InputDecoration(labelText: 'ملاحظة'),
@@ -145,9 +183,15 @@ class _EditTransactionScreenState extends State<EditTransactionScreen> {
                 onChanged: (value) => note = value,
               ),
               const SizedBox(height: 24),
+              
+              // زر الحفظ
               ElevatedButton(
                 onPressed: _updateTransaction,
-                child: const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Text('💾 حفظ التعديلات', style: TextStyle(fontSize: 16))),
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 50),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                ),
+                child: const Text('💾 حفظ التعديلات', style: TextStyle(fontSize: 16)),
               ),
             ],
           ),

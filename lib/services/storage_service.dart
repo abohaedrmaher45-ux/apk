@@ -1,4 +1,6 @@
+// lib/services/storage_service.dart
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/customer.dart';
 import '../models/transaction.dart';
@@ -10,22 +12,42 @@ class StorageService {
   static const String _nextTransactionIdKey = 'nextTransactionId';
 
   late SharedPreferences _prefs;
+  bool _isInitialized = false;
 
   StorageService._private();
   static final StorageService instance = StorageService._private();
 
   Future<void> init() async {
-    _prefs = await SharedPreferences.getInstance();
+    try {
+      _prefs = await SharedPreferences.getInstance();
+      _isInitialized = true;
+      if (kDebugMode) print('✅ StorageService initialized');
+    } catch (e) {
+      if (kDebugMode) print('❌ StorageService init error: $e');
+      rethrow;
+    }
+  }
+
+  void _checkInitialized() {
+    if (!_isInitialized) {
+      throw Exception('StorageService not initialized. Call init() first.');
+    }
   }
 
   // ========== العملاء ==========
   
   Future<List<Customer>> getCustomers() async {
-    final String? jsonString = _prefs.getString(_customersKey);
-    if (jsonString == null) return [];
-    
-    List<dynamic> jsonList = jsonDecode(jsonString);
-    return jsonList.map((json) => Customer.fromJson(json)).toList();
+    _checkInitialized();
+    try {
+      final String? jsonString = _prefs.getString(_customersKey);
+      if (jsonString == null || jsonString.isEmpty) return [];
+      
+      List<dynamic> jsonList = jsonDecode(jsonString);
+      return jsonList.map((json) => Customer.fromJson(json)).toList();
+    } catch (e) {
+      if (kDebugMode) print('Error loading customers: $e');
+      return [];
+    }
   }
 
   Future<void> _saveCustomers(List<Customer> customers) async {
@@ -34,6 +56,7 @@ class StorageService {
   }
 
   Future<int> getNextCustomerId() async {
+    _checkInitialized();
     int nextId = _prefs.getInt(_nextCustomerIdKey) ?? 1;
     await _prefs.setInt(_nextCustomerIdKey, nextId + 1);
     return nextId;
@@ -54,14 +77,19 @@ class StorageService {
     }
   }
 
-  Future<void> deleteCustomer(int id) async {
-    final customers = await getCustomers();
-    customers.removeWhere((c) => c.id == id);
-    await _saveCustomers(customers);
-    
-    final transactions = await getTransactions();
-    transactions.removeWhere((t) => t.customerId == id);
-    await _saveTransactions(transactions);
+  Future<bool> deleteCustomer(int id) async {
+    try {
+      final customers = await getCustomers();
+      customers.removeWhere((c) => c.id == id);
+      await _saveCustomers(customers);
+      
+      final transactions = await getTransactions();
+      transactions.removeWhere((t) => t.customerId == id);
+      await _saveTransactions(transactions);
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
   Customer? getCustomerById(List<Customer> customers, int id) {
@@ -75,11 +103,17 @@ class StorageService {
   // ========== المعاملات ==========
   
   Future<List<Transaction>> getTransactions() async {
-    final String? jsonString = _prefs.getString(_transactionsKey);
-    if (jsonString == null) return [];
-    
-    List<dynamic> jsonList = jsonDecode(jsonString);
-    return jsonList.map((json) => Transaction.fromJson(json)).toList();
+    _checkInitialized();
+    try {
+      final String? jsonString = _prefs.getString(_transactionsKey);
+      if (jsonString == null || jsonString.isEmpty) return [];
+      
+      List<dynamic> jsonList = jsonDecode(jsonString);
+      return jsonList.map((json) => Transaction.fromJson(json)).toList();
+    } catch (e) {
+      if (kDebugMode) print('Error loading transactions: $e');
+      return [];
+    }
   }
 
   Future<void> _saveTransactions(List<Transaction> transactions) async {
@@ -88,6 +122,7 @@ class StorageService {
   }
 
   Future<int> getNextTransactionId() async {
+    _checkInitialized();
     int nextId = _prefs.getInt(_nextTransactionIdKey) ?? 1;
     await _prefs.setInt(_nextTransactionIdKey, nextId + 1);
     return nextId;
@@ -135,27 +170,22 @@ class StorageService {
 
   Future<List<Map<String, dynamic>>> getCustomerRemainingMaterials(int customerId) async {
     final transactions = await getTransactions();
-    final Set<String> materials = {};
+    final Map<String, double> remainingMap = {};
     
     for (var t in transactions) {
       if (t.customerId == customerId) {
-        materials.add(t.materialName);
+        if (t.type == TransactionType.withdrawal) {
+          remainingMap[t.materialName] = (remainingMap[t.materialName] ?? 0) + t.quantity;
+        } else {
+          remainingMap[t.materialName] = (remainingMap[t.materialName] ?? 0) - t.quantity;
+        }
       }
     }
     
-    List<Map<String, dynamic>> result = [];
-    
-    for (String material in materials) {
-      double remaining = await getRemainingQuantity(customerId, material);
-      if (remaining > 0) {
-        result.add({
-          'materialName': material,
-          'remaining': remaining,
-        });
-      }
-    }
-    
-    return result;
+    return remainingMap.entries
+        .where((e) => e.value > 0)
+        .map((e) => {'materialName': e.key, 'remaining': e.value})
+        .toList();
   }
   
   Future<List<Transaction>> getTransactionsByCustomer(int customerId) async {
@@ -166,11 +196,12 @@ class StorageService {
       ..sort((a, b) => b.date.compareTo(a.date));
   }
   
-  Future<List<Transaction>> getWithdrawalsByCustomer(int customerId) async {
+  Future<Transaction?> getTransactionById(int id) async {
     final transactions = await getTransactions();
-    return transactions
-        .where((t) => t.customerId == customerId && t.type == TransactionType.withdrawal)
-        .toList()
-      ..sort((a, b) => b.date.compareTo(a.date));
+    try {
+      return transactions.firstWhere((t) => t.id == id);
+    } catch (e) {
+      return null;
+    }
   }
 }

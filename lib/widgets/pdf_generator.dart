@@ -1,3 +1,4 @@
+// lib/widgets/pdf_generator.dart
 import 'dart:io';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
@@ -6,7 +7,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/customer.dart';
 import '../models/transaction.dart';
-import '../utils/constants.dart';
+import '../utils/app_constants.dart';
 
 class PdfGenerator {
   static Future<void> generateReturnInvoice({
@@ -28,7 +29,7 @@ class PdfGenerator {
             child: pw.Column(
               children: [
                 pw.Text(
-                  companyName,
+                  AppConstants.companyName,
                   style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
                 ),
                 pw.SizedBox(height: 10),
@@ -69,10 +70,10 @@ class PdfGenerator {
               pw.TableRow(
                 children: [
                   pw.Padding(padding: pw.EdgeInsets.all(8), child: pw.Text(transaction.materialName)),
-                  pw.Padding(padding: pw.EdgeInsets.all(8), child: pw.Text('${transaction.quantity.toStringAsFixed(2)} ${materialUnit[transaction.materialName]}')),
-                  pw.Padding(padding: pw.EdgeInsets.all(8), child: pw.Text('${transaction.pricePerUnit.toStringAsFixed(2)} $currencySymbol')),
+                  pw.Padding(padding: pw.EdgeInsets.all(8), child: pw.Text('${transaction.quantity.toStringAsFixed(2)} ${AppConstants.getUnit(transaction.materialName)}')),
+                  pw.Padding(padding: pw.EdgeInsets.all(8), child: pw.Text('${transaction.pricePerUnit.toStringAsFixed(2)} ${AppConstants.currencySymbol}')),
                   pw.Padding(padding: pw.EdgeInsets.all(8), child: pw.Text('${transaction.discountPercent}%')),
-                  pw.Padding(padding: pw.EdgeInsets.all(8), child: pw.Text('${totalAfterDiscount.toStringAsFixed(2)} $currencySymbol')),
+                  pw.Padding(padding: pw.EdgeInsets.all(8), child: pw.Text('${totalAfterDiscount.toStringAsFixed(2)} ${AppConstants.currencySymbol}')),
                 ],
               ),
             ],
@@ -83,10 +84,10 @@ class PdfGenerator {
             child: pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.end,
               children: [
-                pw.Text('الإجمالي قبل الخصم: ${totalBeforeDiscount.toStringAsFixed(2)} $currencySymbol'),
-                pw.Text('قيمة الخصم: ${discountAmount.toStringAsFixed(2)} $currencySymbol'),
+                pw.Text('الإجمالي قبل الخصم: ${totalBeforeDiscount.toStringAsFixed(2)} ${AppConstants.currencySymbol}'),
+                pw.Text('قيمة الخصم: ${discountAmount.toStringAsFixed(2)} ${AppConstants.currencySymbol}'),
                 pw.Text(
-                  'الإجمالي بعد الخصم: ${totalAfterDiscount.toStringAsFixed(2)} $currencySymbol',
+                  'الإجمالي بعد الخصم: ${totalAfterDiscount.toStringAsFixed(2)} ${AppConstants.currencySymbol}',
                   style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14),
                 ),
               ],
@@ -97,8 +98,8 @@ class PdfGenerator {
             alignment: pw.Alignment.center,
             child: pw.Column(
               children: [
-                pw.Text(managerName),
-                pw.Text(contactPhone),
+                pw.Text(AppConstants.managerName),
+                pw.Text(AppConstants.contactPhone),
               ],
             ),
           ),
@@ -129,7 +130,7 @@ class PdfGenerator {
         build: (context) => [
           pw.Center(
             child: pw.Text(
-              companyName,
+              AppConstants.companyName,
               style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
             ),
           ),
@@ -161,7 +162,7 @@ class PdfGenerator {
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               children: [
                 pw.Text(item['materialName']),
-                pw.Text('${(item['remaining'] as double).toStringAsFixed(2)} ${materialUnit[item['materialName']]}'),
+                pw.Text('${(item['remaining'] as double).toStringAsFixed(2)} ${AppConstants.getUnit(item['materialName'])}'),
               ],
             )).toList(),
             pw.SizedBox(height: 20),
@@ -186,8 +187,8 @@ class PdfGenerator {
                   pw.Padding(padding: pw.EdgeInsets.all(8), child: pw.Text(t.date)),
                   pw.Padding(padding: pw.EdgeInsets.all(8), child: pw.Text(t.type.name)),
                   pw.Padding(padding: pw.EdgeInsets.all(8), child: pw.Text(t.materialName)),
-                  pw.Padding(padding: pw.EdgeInsets.all(8), child: pw.Text('${t.quantity.toStringAsFixed(2)} ${materialUnit[t.materialName]}')),
-                  pw.Padding(padding: pw.EdgeInsets.all(8), child: pw.Text('${t.totalAfterDiscount.toStringAsFixed(2)} $currencySymbol')),
+                  pw.Padding(padding: pw.EdgeInsets.all(8), child: pw.Text('${t.quantity.toStringAsFixed(2)} ${AppConstants.getUnit(t.materialName)}')),
+                  pw.Padding(padding: pw.EdgeInsets.all(8), child: pw.Text('${t.totalAfterDiscount.toStringAsFixed(2)} ${AppConstants.currencySymbol}')),
                 ],
               )),
             ],
@@ -197,8 +198,8 @@ class PdfGenerator {
             alignment: pw.Alignment.center,
             child: pw.Column(
               children: [
-                pw.Text(managerName),
-                pw.Text(contactPhone),
+                pw.Text(AppConstants.managerName),
+                pw.Text(AppConstants.contactPhone),
               ],
             ),
           ),
