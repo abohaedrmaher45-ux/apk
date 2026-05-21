@@ -6,8 +6,6 @@ import '../services/storage_service.dart';
 import '../models/customer.dart';
 import '../models/transaction.dart';
 import '../utils/app_constants.dart';
-import '../widgets/custom_button.dart';
-import '../widgets/custom_text_field.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -34,22 +32,23 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   
   final TextEditingController newCustomerNameController = TextEditingController();
   final TextEditingController newCustomerPhoneController = TextEditingController();
+  final TextEditingController quantityController = TextEditingController();
+  final TextEditingController priceController = TextEditingController();
+  final TextEditingController discountController = TextEditingController();
+  final TextEditingController noteController = TextEditingController();
   
   List<Customer> customers = [];
   bool isLoading = false;
-  
   late AnimationController _animationController;
-  late Animation<double> _fadeAnimation;
 
   @override
   void initState() {
     super.initState();
     _loadCustomers();
     _animationController = AnimationController(
-      duration: AppConstants.animationDuration,
+      duration: const Duration(milliseconds: 500),
       vsync: this,
     );
-    _fadeAnimation = CurvedAnimation(parent: _animationController, curve: Curves.easeIn);
     _animationController.forward();
   }
 
@@ -58,6 +57,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     _animationController.dispose();
     newCustomerNameController.dispose();
     newCustomerPhoneController.dispose();
+    quantityController.dispose();
+    priceController.dispose();
+    discountController.dispose();
+    noteController.dispose();
     super.dispose();
   }
 
@@ -98,9 +101,20 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         return;
       }
       
-      // التحقق من صحة تاريخ العودة
       if (selectedReturnDate.isBefore(DateTime.now())) {
         Fluttertoast.showToast(msg: 'تاريخ العودة يجب أن يكون بعد اليوم');
+        setState(() => isLoading = false);
+        return;
+      }
+      
+      if (quantity <= 0) {
+        Fluttertoast.showToast(msg: 'الكمية يجب أن تكون أكبر من 0');
+        setState(() => isLoading = false);
+        return;
+      }
+      
+      if (pricePerUnit <= 0) {
+        Fluttertoast.showToast(msg: 'السعر يجب أن يكون أكبر من 0');
         setState(() => isLoading = false);
         return;
       }
@@ -148,70 +162,91 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       pricePerUnit = 0;
       selectedReturnDate = DateTime.now().add(const Duration(days: 30));
       note = '';
+      quantityController.clear();
+      priceController.clear();
+      discountController.clear();
+      noteController.clear();
     });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: FadeTransition(
-        opacity: _fadeAnimation,
-        child: CustomScrollView(
-          slivers: [
-            // Header جميل
-            SliverAppBar(
-              expandedHeight: 180,
-              floating: false,
-              pinned: true,
-              flexibleSpace: FlexibleSpaceBar(
-                title: const Text('سحب مواد', style: TextStyle(fontWeight: FontWeight.bold)),
-                background: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        AppConstants.primaryColor,
-                        AppConstants.primaryColor.withBlue(100),
-                      ],
-                    ),
+      body: CustomScrollView(
+        slivers: [
+          // SliverAppBar مميز
+          SliverAppBar(
+            expandedHeight: 200,
+            floating: false,
+            pinned: true,
+            flexibleSpace: FlexibleSpaceBar(
+              title: const Text(
+                'سحب مواد',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              background: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      AppConstants.primaryColor,
+                      AppConstants.primaryColor.withBlue(100),
+                    ],
                   ),
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.construction, size: 50, color: Colors.white70),
-                        const SizedBox(height: 8),
-                        Text(
-                          AppConstants.companyName,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w500,
-                          ),
-                          textAlign: TextAlign.center,
+                ),
+                child: SafeArea(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.construction,
+                        size: 60,
+                        color: Colors.white70,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        AppConstants.companyName,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
                         ),
-                      ],
-                    ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'بيع وإيجار مواد البناء',
+                        style: TextStyle(
+                          color: Colors.white.withAlpha(204),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.people_outline),
-                  onPressed: () => Navigator.pushNamed(context, '/customers'),
-                  tooltip: 'قائمة العملاء',
-                ),
-              ],
             ),
-            
-            // نموذج الإدخال
-            SliverPadding(
-              padding: const EdgeInsets.all(16),
-              sliver: SliverToBoxAdapter(
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.people_outline),
+                onPressed: () => Navigator.pushNamed(context, '/customers'),
+                tooltip: 'قائمة العملاء',
+              ),
+            ],
+          ),
+          
+          // نموذج الإدخال
+          SliverPadding(
+            padding: const EdgeInsets.all(16),
+            sliver: SliverToBoxAdapter(
+              child: FadeTransition(
+                opacity: _animationController,
                 child: Card(
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                  elevation: 8,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(24),
+                  ),
                   child: Padding(
                     padding: const EdgeInsets.all(20),
                     child: Form(
@@ -219,9 +254,23 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // نوع العميل
-                          const Text('نوع العميل', style: TextStyle(fontWeight: FontWeight.w600)),
-                          const SizedBox(height: 8),
+                          // عنوان القسم
+                          const Row(
+                            children: [
+                              Icon(Icons.person, color: AppConstants.primaryColor),
+                              SizedBox(width: 8),
+                              Text(
+                                'معلومات العميل',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const Divider(height: 24),
+                          
+                          // اختيار نوع العميل
                           Container(
                             padding: const EdgeInsets.all(4),
                             decoration: BoxDecoration(
@@ -239,12 +288,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                         color: !isNewCustomer ? AppConstants.primaryColor : Colors.transparent,
                                         borderRadius: BorderRadius.circular(36),
                                       ),
-                                      child: Text(
-                                        'عميل موجود',
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(
-                                          color: !isNewCustomer ? Colors.white : Colors.grey.shade700,
-                                          fontWeight: FontWeight.w600,
+                                      child: Center(
+                                        child: Text(
+                                          'عميل موجود',
+                                          style: TextStyle(
+                                            color: !isNewCustomer ? Colors.white : Colors.grey.shade700,
+                                            fontWeight: FontWeight.w600,
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -259,12 +309,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                         color: isNewCustomer ? AppConstants.primaryColor : Colors.transparent,
                                         borderRadius: BorderRadius.circular(36),
                                       ),
-                                      child: Text(
-                                        'عميل جديد',
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(
-                                          color: isNewCustomer ? Colors.white : Colors.grey.shade700,
-                                          fontWeight: FontWeight.w600,
+                                      child: Center(
+                                        child: Text(
+                                          'عميل جديد',
+                                          style: TextStyle(
+                                            color: isNewCustomer ? Colors.white : Colors.grey.shade700,
+                                            fontWeight: FontWeight.w600,
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -276,20 +327,17 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                           
                           const SizedBox(height: 20),
                           
-                          // اختيار العميل أو إضافته
+                          // اختيار العميل
                           if (!isNewCustomer)
                             DropdownButtonFormField<String>(
-                              decoration: const InputDecoration(labelText: 'اسم العميل *'),
+                              decoration: const InputDecoration(
+                                labelText: 'اختر العميل *',
+                                prefixIcon: Icon(Icons.person_outline),
+                              ),
                               value: selectedCustomerName,
                               items: customers.map((c) => DropdownMenuItem(
                                 value: c.name,
-                                child: Row(
-                                  children: [
-                                    const Icon(Icons.person_outline, size: 18),
-                                    const SizedBox(width: 8),
-                                    Text(c.name),
-                                  ],
-                                ),
+                                child: Text(c.name),
                               )).toList(),
                               onChanged: (value) => setState(() {
                                 selectedCustomerName = value;
@@ -299,32 +347,60 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                             ),
                           
                           if (isNewCustomer) ...[
-                            CustomTextField(
-                              label: 'اسم العميل *',
+                            TextFormField(
                               controller: newCustomerNameController,
+                              decoration: const InputDecoration(
+                                labelText: 'اسم العميل *',
+                                prefixIcon: Icon(Icons.person_add),
+                              ),
                               validator: (value) => value?.trim().isEmpty == true ? 'الرجاء إدخال اسم العميل' : null,
                             ),
                             const SizedBox(height: 12),
-                            CustomTextField(
-                              label: 'رقم الهاتف',
+                            TextFormField(
                               controller: newCustomerPhoneController,
+                              decoration: const InputDecoration(
+                                labelText: 'رقم الهاتف (اختياري)',
+                                prefixIcon: Icon(Icons.phone),
+                              ),
                               keyboardType: TextInputType.phone,
                             ),
                           ],
                           
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 24),
                           
-                          // المادة
+                          // عنوان قسم المواد
+                          const Row(
+                            children: [
+                              Icon(Icons.inventory, color: AppConstants.primaryColor),
+                              SizedBox(width: 8),
+                              Text(
+                                'معلومات المادة',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const Divider(height: 24),
+                          
+                          // اختيار المادة
                           DropdownButtonFormField<String>(
-                            decoration: const InputDecoration(labelText: 'نوع المادة *'),
+                            decoration: const InputDecoration(
+                              labelText: 'نوع المادة *',
+                              prefixIcon: Icon(Icons.category),
+                            ),
                             value: selectedMaterial,
-                            items: AppConstants.materialList.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
+                            items: AppConstants.materialList.map((m) => DropdownMenuItem(
+                              value: m,
+                              child: Text(m),
+                            )).toList(),
                             onChanged: (value) => setState(() => selectedMaterial = value!),
                           ),
                           
                           const SizedBox(height: 16),
                           
-                          // التاريخ والخصم
+                          // تاريخ البدء والخصم
                           Row(
                             children: [
                               Expanded(
@@ -347,21 +423,22 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                     if (date != null) setState(() => selectedStartDate = date);
                                   },
                                   child: InputDecorator(
-                                    decoration: const InputDecoration(labelText: 'تاريخ البدء *'),
-                                    child: Row(
-                                      children: [
-                                        const Icon(Icons.calendar_today, size: 18),
-                                        const SizedBox(width: 8),
-                                        Text(DateFormat('yyyy-MM-dd').format(selectedStartDate)),
-                                      ],
+                                    decoration: const InputDecoration(
+                                      labelText: 'تاريخ البدء *',
+                                      prefixIcon: Icon(Icons.calendar_today),
                                     ),
+                                    child: Text(DateFormat('yyyy-MM-dd').format(selectedStartDate)),
                                   ),
                                 ),
                               ),
                               const SizedBox(width: 16),
                               Expanded(
-                                child: CustomTextField(
-                                  label: 'الخصم (%)',
+                                child: TextFormField(
+                                  controller: discountController,
+                                  decoration: const InputDecoration(
+                                    labelText: 'الخصم (%)',
+                                    prefixIcon: Icon(Icons.percent),
+                                  ),
                                   keyboardType: TextInputType.number,
                                   onChanged: (value) => discountPercent = double.tryParse(value) ?? 0,
                                 ),
@@ -375,29 +452,40 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                           Row(
                             children: [
                               Expanded(
-                                child: CustomTextField(
-                                  label: 'الكمية *',
+                                child: TextFormField(
+                                  controller: quantityController,
+                                  decoration: InputDecoration(
+                                    labelText: 'الكمية *',
+                                    prefixIcon: const Icon(Icons.numbers),
+                                    suffixText: AppConstants.getUnit(selectedMaterial),
+                                  ),
                                   keyboardType: TextInputType.number,
-                                  suffixText: AppConstants.materialUnit[selectedMaterial],
                                   onChanged: (value) => quantity = double.tryParse(value) ?? 0,
                                   validator: (value) {
                                     if (value == null || value.isEmpty) return 'الرجاء إدخال الكمية';
-                                    if (double.tryParse(value) == null) return 'الرجاء إدخال رقم صحيح';
-                                    if (double.parse(value) <= 0) return 'الكمية يجب أن تكون أكبر من 0';
+                                    final val = double.tryParse(value);
+                                    if (val == null) return 'الرجاء إدخال رقم صحيح';
+                                    if (val <= 0) return 'الكمية يجب أن تكون أكبر من 0';
                                     return null;
                                   },
                                 ),
                               ),
                               const SizedBox(width: 16),
                               Expanded(
-                                child: CustomTextField(
-                                  label: 'سعر الفرد *',
+                                child: TextFormField(
+                                  controller: priceController,
+                                  decoration: InputDecoration(
+                                    labelText: 'سعر الفرد *',
+                                    prefixIcon: const Icon(Icons.attach_money),
+                                    suffixText: AppConstants.currencySymbol,
+                                  ),
                                   keyboardType: TextInputType.number,
-                                  suffixText: AppConstants.currencySymbol,
                                   onChanged: (value) => pricePerUnit = double.tryParse(value) ?? 0,
                                   validator: (value) {
                                     if (value == null || value.isEmpty) return 'الرجاء إدخال السعر';
-                                    if (double.tryParse(value) == null) return 'الرجاء إدخال رقم صحيح';
+                                    final val = double.tryParse(value);
+                                    if (val == null) return 'الرجاء إدخال رقم صحيح';
+                                    if (val <= 0) return 'السعر يجب أن يكون أكبر من 0';
                                     return null;
                                   },
                                 ),
@@ -427,10 +515,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                               if (date != null) setState(() => selectedReturnDate = date);
                             },
                             child: InputDecorator(
-                              decoration: const InputDecoration(labelText: 'تاريخ العودة *'),
+                              decoration: const InputDecoration(
+                                labelText: 'تاريخ العودة *',
+                                prefixIcon: Icon(Icons.calendar_today, color: AppConstants.dangerColor),
+                              ),
                               child: Row(
                                 children: [
-                                  const Icon(Icons.calendar_today, size: 18, color: AppConstants.dangerColor),
+                                  const Icon(Icons.warning_amber, size: 18, color: AppConstants.dangerColor),
                                   const SizedBox(width: 8),
                                   Text(
                                     DateFormat('yyyy-MM-dd').format(selectedReturnDate),
@@ -444,31 +535,133 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                           const SizedBox(height: 16),
                           
                           // ملاحظة
-                          CustomTextField(
-                            label: 'ملاحظة',
+                          TextFormField(
+                            controller: noteController,
+                            decoration: const InputDecoration(
+                              labelText: 'ملاحظة',
+                              prefixIcon: Icon(Icons.note_add),
+                            ),
                             maxLines: 2,
                             onChanged: (value) => note = value,
                           ),
                           
+                          const SizedBox(height: 32),
+                          
+                          // عرض ملخص العملية
+                          if (quantity > 0 && pricePerUnit > 0)
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: AppConstants.primaryColor.withAlpha(13),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: AppConstants.primaryColor.withAlpha(26)),
+                              ),
+                              child: Column(
+                                children: [
+                                  const Text(
+                                    'ملخص العملية',
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      const Text('الإجمالي قبل الخصم:'),
+                                      Text(
+                                        '${(quantity * pricePerUnit).toStringAsFixed(2)} ${AppConstants.currencySymbol}',
+                                        style: const TextStyle(fontWeight: FontWeight.bold),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      const Text('قيمة الخصم:'),
+                                      Text(
+                                        '- ${(quantity * pricePerUnit * discountPercent / 100).toStringAsFixed(2)} ${AppConstants.currencySymbol}',
+                                        style: const TextStyle(color: AppConstants.dangerColor),
+                                      ),
+                                    ],
+                                  ),
+                                  const Divider(height: 20),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      const Text(
+                                        'الإجمالي النهائي:',
+                                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                      ),
+                                      Text(
+                                        '${(quantity * pricePerUnit * (1 - discountPercent / 100)).toStringAsFixed(2)} ${AppConstants.currencySymbol}',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                          color: AppConstants.successColor,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          
                           const SizedBox(height: 24),
                           
-                          // أزرار
-                          CustomButton(
-                            text: '💾 حفظ العملية',
-                            onPressed: _saveWithdrawal,
-                            isLoading: isLoading,
-                            icon: Icons.save,
+                          // زر الحفظ
+                          SizedBox(
+                            width: double.infinity,
+                            height: 55,
+                            child: ElevatedButton(
+                              onPressed: isLoading ? null : _saveWithdrawal,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppConstants.primaryColor,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                              ),
+                              child: isLoading
+                                  ? const SizedBox(
+                                      width: 24,
+                                      height: 24,
+                                      child: CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.save),
+                                        SizedBox(width: 8),
+                                        Text('💾 حفظ العملية', style: TextStyle(fontSize: 16)),
+                                      ],
+                                    ),
+                            ),
                           ),
                           
                           const SizedBox(height: 12),
                           
-                          OutlinedButton.icon(
-                            onPressed: () => Navigator.pushNamed(context, '/customers'),
-                            icon: const Icon(Icons.people),
-                            label: const Text('📋 قائمة العملاء'),
-                            style: OutlinedButton.styleFrom(
-                              minimumSize: const Size(double.infinity, 52),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          // زر قائمة العملاء
+                          SizedBox(
+                            width: double.infinity,
+                            height: 55,
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.pushNamed(context, '/customers'),
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(color: AppConstants.primaryColor),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                              ),
+                              child: const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.people, color: AppConstants.primaryColor),
+                                  SizedBox(width: 8),
+                                  Text('📋 قائمة العملاء', style: TextStyle(fontSize: 16)),
+                                ],
+                              ),
                             ),
                           ),
                         ],
@@ -478,8 +671,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
