@@ -36,13 +36,16 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   
-  fonts:
-    - family: Cairo
-      fonts:
-        - asset: assets/fonts/Cairo-Regular.ttf
-          weight: 400
-        - asset: assets/fonts/Cairo-Bold.ttf
-          weight: 700
+  # تم تعطيل الخطوط مؤقتاً لحين إضافتها
+  # إذا أردت إضافة الخطوط لاحقاً، قم بإنشاء مجلد assets/fonts وضع فيه الخطوط
+  # ثم قم بإلغاء التعليق عن الأسطر التالية:
+  # fonts:
+  #   - family: Cairo
+  #     fonts:
+  #       - asset: assets/fonts/Cairo-Regular.ttf
+  #         weight: 400
+  #       - asset: assets/fonts/Cairo-Bold.ttf
+  #         weight: 700
 
 flutter_launcher_icons:
   android: true
