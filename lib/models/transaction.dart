@@ -1,3 +1,4 @@
+// lib/models/transaction.dart
 enum TransactionType { withdrawal, return_ }
 
 extension TransactionTypeExt on TransactionType {
@@ -34,9 +35,10 @@ class Transaction {
   double pricePerUnit;
   double discountPercent;
   String date;
-  String? returnDate;
+  String? returnDate;      // تاريخ العودة المتوقع (للسحب فقط)
+  String? actualReturnDate; // تاريخ الإرجاع الفعلي (جديد)
   String? note;
-  int? linkedWithdrawalId;
+  int? linkedWithdrawalId;  // ربط الإرجاع بعملية السحب الأصلية
 
   Transaction({
     required this.id,
@@ -48,14 +50,13 @@ class Transaction {
     required this.discountPercent,
     required this.date,
     this.returnDate,
+    this.actualReturnDate,
     this.note,
     this.linkedWithdrawalId,
   });
 
   double get totalBeforeDiscount => quantity * pricePerUnit;
-  
   double get discountAmount => totalBeforeDiscount * (discountPercent / 100);
-  
   double get totalAfterDiscount => totalBeforeDiscount - discountAmount;
 
   Map<String, dynamic> toJson() => {
@@ -68,6 +69,7 @@ class Transaction {
     'discountPercent': discountPercent,
     'date': date,
     'returnDate': returnDate,
+    'actualReturnDate': actualReturnDate,
     'note': note,
     'linkedWithdrawalId': linkedWithdrawalId,
   };
@@ -83,6 +85,7 @@ class Transaction {
       discountPercent: json['discountPercent'],
       date: json['date'],
       returnDate: json['returnDate'],
+      actualReturnDate: json['actualReturnDate'],
       note: json['note'],
       linkedWithdrawalId: json['linkedWithdrawalId'],
     );

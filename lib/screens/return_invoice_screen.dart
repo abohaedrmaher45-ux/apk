@@ -19,242 +19,406 @@ class ReturnInvoiceScreen extends StatefulWidget {
 class _ReturnInvoiceScreenState extends State<ReturnInvoiceScreen> {
   final StorageService storage = StorageService.instance;
   final _formKey = GlobalKey<FormState>();
-  Customer? customer;
-  String selectedMaterial = AppConstants.materialList[0];
-  double quantity = 0;
-  double pricePerUnit = 0;
-  double discountPercent = 0;
-  String note = '';
-  bool isLoading = true;
+  
+  Customer? _customer;
+  List<Map<String, dynamic>> _remainingMaterials = [];
+  String? _selectedMaterial;
+  double _returnQuantity = 0;
+  String _note = '';
+  bool _isLoading = true;
+  bool _isSaving = false;
 
   @override
   void initState() {
     super.initState();
-    _loadCustomer();
+    _loadData();
   }
 
-  Future<void> _loadCustomer() async {
-    setState(() => isLoading = true);
+  Future<void> _loadData() async {
+    setState(() => _isLoading = true);
+    
     final customers = await storage.getCustomers();
-    setState(() {
-      customer = storage.getCustomerById(customers, widget.customerId);
-      isLoading = false;
-    });
+    _customer = storage.getCustomerById(customers, widget.customerId);
+    _remainingMaterials = await storage.getCustomerRemainingMaterials(widget.customerId);
+    
+    if (_remainingMaterials.isNotEmpty) {
+      _selectedMaterial = _remainingMaterials.first['materialName'];
+    }
+    
+    setState(() => _isLoading = false);
+  }
+
+  double get _maxQuantity {
+    final material = _remainingMaterials.firstWhere(
+      (m) => m['materialName'] == _selectedMaterial,
+      orElse: () => {'remaining': 0.0},
+    );
+    return (material['remaining'] as double?) ?? 0.0;
   }
 
   Future<void> _saveReturn() async {
     if (!_formKey.currentState!.validate()) return;
-    if (customer == null) return;
+    if (_customer == null) return;
+    if (_selectedMaterial == null) return;
     
-    // التحقق من صحة الكمية المرتجعة
-    final remaining = await storage.getRemainingQuantity(widget.customerId, selectedMaterial);
-    if (quantity > remaining) {
-      Fluttertoast.showToast(msg: '⚠️ الكمية المرتجعة (${quantity.toStringAsFixed(2)}) أكبر من المتوفر (${remaining.toStringAsFixed(2)})');
+    if (_returnQuantity > _maxQuantity) {
+      _showToast('⚠️ الكمية المرتجعة أكبر من المتوفرة (${_maxQuantity.toStringAsFixed(2)})');
       return;
     }
     
-    final transactionId = await storage.getNextTransactionId();
-    final transaction = Transaction(
-      id: transactionId,
-      customerId: widget.customerId,
-      materialName: selectedMaterial,
-      type: TransactionType.return_,
-      quantity: quantity,
-      pricePerUnit: pricePerUnit,
-      discountPercent: discountPercent,
-      date: DateFormat('yyyy-MM-dd').format(DateTime.now()),
-      returnDate: null,
-      note: note.isEmpty ? null : note,
-      linkedWithdrawalId: null,
-    );
+    setState(() => _isSaving = true);
     
-    await storage.addTransaction(transaction);
-    await PdfGenerator.generateReturnInvoice(customer: customer!, transaction: transaction);
-    
-    Fluttertoast.showToast(msg: '✅ تم حفظ الإرجاع وإنشاء PDF');
-    if (mounted) Navigator.pop(context);
+    try {
+      final transactionId = await storage.getNextTransactionId();
+      final transaction = Transaction(
+        id: transactionId,
+        customerId: widget.customerId,
+        materialName: _selectedMaterial!,
+        type: TransactionType.return_,
+        quantity: _returnQuantity,
+        pricePerUnit: 0,
+        discountPercent: 0,
+        date: DateFormat('yyyy-MM-dd').format(DateTime.now()),
+        returnDate: null,
+        actualReturnDate: DateFormat('yyyy-MM-dd').format(DateTime.now()),
+        note: _note.isEmpty ? null : _note,
+        linkedWithdrawalId: null,
+      );
+      
+      await storage.addTransaction(transaction);
+      await PdfGenerator.generateReturnInvoice(customer: _customer!, transaction: transaction);
+      
+      _showToast('✅ تم تسجيل الإرجاع بنجاح');
+      if (mounted) Navigator.pop(context);
+      
+    } catch (e) {
+      _showToast('❌ حدث خطأ: $e');
+    } finally {
+      setState(() => _isSaving = false);
+    }
   }
-
-  double get totalBeforeDiscount => quantity * pricePerUnit;
-  double get discountAmount => totalBeforeDiscount * (discountPercent / 100);
-  double get totalAfterDiscount => totalBeforeDiscount - discountAmount;
+  
+  void _showToast(String msg) {
+    Fluttertoast.showToast(msg: msg, gravity: ToastGravity.BOTTOM);
+  }
 
   @override
   Widget build(BuildContext context) {
-    if (isLoading) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('فاتورة إرجاع')),
-        body: const Center(child: CircularProgressIndicator()),
-      );
-    }
-    
-    if (customer == null) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('فاتورة إرجاع')),
-        body: const Center(child: Text('العميل غير موجود')),
-      );
-    }
-    
     return Scaffold(
-      appBar: AppBar(title: const Text('فاتورة إرجاع')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: Column(
+      backgroundColor: const Color(0xFFF5F7FA),
+      appBar: AppBar(
+        title: const Text('فاتورة إرجاع مواد'),
+        backgroundColor: AppConstants.primaryColor,
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _customer == null
+              ? const Center(child: Text('العميل غير موجود'))
+              : _remainingMaterials.isEmpty
+                  ? _buildEmptyState()
+                  : _buildReturnForm(),
+    );
+  }
+  
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.inventory, size: 80, color: Colors.grey),
+          const SizedBox(height: 16),
+          const Text(
+            'لا توجد مواد متبقية لهذا العميل',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'جميع المواد المسحوبة تم إرجاعها',
+            style: TextStyle(color: Colors.grey.shade600),
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(context),
+            icon: const Icon(Icons.arrow_back),
+            label: const Text('العودة'),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildReturnForm() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          children: [
+            _buildCustomerCard(),
+            const SizedBox(height: 20),
+            _buildRemainingMaterialsCard(),
+            const SizedBox(height: 20),
+            _buildReturnFormCard(),
+            const SizedBox(height: 30),
+            _buildSaveButton(),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildCustomerCard() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(13),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppConstants.primaryColor.withAlpha(26),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Icon(Icons.person, size: 28, color: AppConstants.primaryColor),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _customer!.name,
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                if (_customer!.phone != null)
+                  Text(
+                    _customer!.phone!,
+                    style: TextStyle(color: Colors.grey.shade600),
+                  ),
+                const SizedBox(height: 4),
+                Text(
+                  'تاريخ الفاتورة: ${DateFormat('yyyy-MM-dd').format(DateTime.now())}',
+                  style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildRemainingMaterialsCard() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(13),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
             children: [
-              // معلومات العميل
-              Card(
-                elevation: 4,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    children: [
-                      Text(
-                        customer!.name,
-                        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                      ),
-                      if (customer!.phone != null) ...[
-                        const SizedBox(height: 8),
-                        Text(customer!.phone!, style: const TextStyle(color: Colors.grey)),
-                      ],
-                      const SizedBox(height: 8),
-                      Text(
-                        'التاريخ: ${DateFormat('yyyy-MM-dd').format(DateTime.now())}',
-                        style: const TextStyle(color: Colors.grey),
-                      ),
-                    ],
-                  ),
+              Icon(Icons.inventory, color: Colors.amber),
+              SizedBox(width: 8),
+              Text('المواد المتبقية', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const Divider(height: 24),
+          ..._remainingMaterials.map((material) => Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  material['materialName'],
+                  style: const TextStyle(fontSize: 16),
                 ),
-              ),
-              const SizedBox(height: 16),
-              
-              // المادة
-              DropdownButtonFormField<String>(
-                decoration: const InputDecoration(labelText: 'نوع المادة *'),
-                value: selectedMaterial,
-                items: AppConstants.materialList.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
-                onChanged: (value) => setState(() => selectedMaterial = value!),
-              ),
-              const SizedBox(height: 16),
-              
-              // الكمية والسعر
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      decoration: InputDecoration(
-                        labelText: 'الكمية المرتجعة *',
-                        suffixText: AppConstants.getUnit(selectedMaterial),
-                      ),
-                      keyboardType: TextInputType.number,
-                      onChanged: (value) => quantity = double.tryParse(value) ?? 0,
-                      validator: (value) {
-                        if (value == null || value.isEmpty) return 'الرجاء إدخال الكمية';
-                        final val = double.tryParse(value);
-                        if (val == null) return 'الرجاء إدخال رقم صحيح';
-                        if (val <= 0) return 'الكمية يجب أن تكون أكبر من 0';
-                        return null;
-                      },
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withAlpha(26),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '${(material['remaining'] as double).toStringAsFixed(2)} ${AppConstants.getUnit(material['materialName'])}',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.amber,
                     ),
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: TextFormField(
-                      decoration: InputDecoration(
-                        labelText: 'سعر الفرد *',
-                        suffixText: AppConstants.currencySymbol,
-                      ),
-                      keyboardType: TextInputType.number,
-                      onChanged: (value) => pricePerUnit = double.tryParse(value) ?? 0,
-                      validator: (value) => (value == null || value.isEmpty) ? 'الرجاء إدخال السعر' : null,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              
-              // الخصم
-              TextFormField(
-                decoration: const InputDecoration(labelText: 'الخصم (%)'),
-                keyboardType: TextInputType.number,
-                onChanged: (value) => discountPercent = double.tryParse(value) ?? 0,
-              ),
-              const SizedBox(height: 16),
-              
-              // ملاحظة
-              TextFormField(
-                decoration: const InputDecoration(labelText: 'ملاحظة (اختياري)'),
-                maxLines: 2,
-                onChanged: (value) => note = value,
-              ),
-              const SizedBox(height: 24),
-              
-              // ملخص الفاتورة
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade50,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.grey.shade200),
                 ),
-                child: Column(
+              ],
+            ),
+          )),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildReturnFormCard() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(13),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.receipt, color: Colors.green),
+              SizedBox(width: 8),
+              Text('بيانات الإرجاع', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const Divider(height: 24),
+          
+          // اختيار المادة - تم التصحيح هنا
+          DropdownButtonFormField<String>(
+            decoration: _inputDecoration('المادة المرتجعة *', Icons.category),
+            value: _selectedMaterial,
+            items: _remainingMaterials.map<DropdownMenuItem<String>>((m) {
+              return DropdownMenuItem<String>(
+                value: m['materialName'],
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('الإجمالي قبل الخصم:'),
-                        Text('${totalBeforeDiscount.toStringAsFixed(2)} ${AppConstants.currencySymbol}'),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('قيمة الخصم:'),
-                        Text('${discountAmount.toStringAsFixed(2)} ${AppConstants.currencySymbol}'),
-                      ],
-                    ),
-                    const Divider(height: 24),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('الإجمالي بعد الخصم:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                        Text(
-                          '${totalAfterDiscount.toStringAsFixed(2)} ${AppConstants.currencySymbol}',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppConstants.primaryColor),
-                        ),
-                      ],
+                    Text(m['materialName']),
+                    const SizedBox(width: 8),
+                    Text(
+                      'متبقي: ${(m['remaining'] as double).toStringAsFixed(2)}',
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 24),
-              
-              // زر الحفظ
-              ElevatedButton(
-                onPressed: _saveReturn,
-                style: ElevatedButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 50),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                ),
-                child: const Text('💾 حفظ وإنشاء PDF', style: TextStyle(fontSize: 16)),
-              ),
-            ],
+              );
+            }).toList(),
+            onChanged: (value) => setState(() => _selectedMaterial = value),
+            validator: (value) => value == null ? 'الرجاء اختيار المادة' : null,
           ),
-        ),
+          const SizedBox(height: 16),
+          
+          // الكمية المرتجعة
+          TextFormField(
+            decoration: _inputDecoration(
+              'الكمية المرتجعة *',
+              Icons.numbers,
+              suffix: AppConstants.getUnit(_selectedMaterial ?? ''),
+            ),
+            keyboardType: TextInputType.number,
+            onChanged: (v) => _returnQuantity = double.tryParse(v) ?? 0,
+            validator: (v) {
+              if (v == null || v.isEmpty) return 'الرجاء إدخال الكمية';
+              final val = double.tryParse(v);
+              if (val == null) return 'الرجاء إدخال رقم صحيح';
+              if (val <= 0) return 'الكمية يجب أن تكون أكبر من 0';
+              if (val > _maxQuantity) return 'الكمية المرتجعة أكبر من المتوفرة (${_maxQuantity.toStringAsFixed(2)})';
+              return null;
+            },
+          ),
+          const SizedBox(height: 16),
+          
+          // ملاحظة
+          TextFormField(
+            decoration: _inputDecoration('ملاحظة (اختياري)', Icons.note_add),
+            maxLines: 2,
+            onChanged: (v) => _note = v,
+          ),
+          const SizedBox(height: 16),
+          
+          // تذكير
+          _buildReminderCard(),
+        ],
       ),
-      bottomNavigationBar: Container(
-        padding: const EdgeInsets.all(16),
-        color: AppConstants.primaryColor.withAlpha(13),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(AppConstants.managerName, style: const TextStyle(fontWeight: FontWeight.bold)),
-            Text(AppConstants.contactPhone),
-          ],
+    );
+  }
+  
+  Widget _buildReminderCard() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.info_outline, color: Colors.blue),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'سيتم خصم هذه الكمية من رصيد العميل تلقائياً',
+              style: TextStyle(color: Colors.blue.shade700, fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildSaveButton() {
+    return SizedBox(
+      width: double.infinity,
+      height: 55,
+      child: ElevatedButton(
+        onPressed: _isSaving ? null : _saveReturn,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.green,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         ),
+        child: _isSaving
+            ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+            : const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.receipt),
+                  SizedBox(width: 8),
+                  Text('تسجيل الإرجاع وطباعة الفاتورة', style: TextStyle(fontSize: 16)),
+                ],
+              ),
+      ),
+    );
+  }
+  
+  InputDecoration _inputDecoration(String label, IconData icon, {String? suffix}) {
+    return InputDecoration(
+      labelText: label,
+      prefixIcon: Icon(icon, color: AppConstants.primaryColor),
+      suffixText: suffix,
+      filled: true,
+      fillColor: Colors.grey.shade50,
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: Colors.grey.shade200)),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(color: AppConstants.primaryColor, width: 2),
       ),
     );
   }
