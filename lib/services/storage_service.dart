@@ -6,7 +6,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/customer.dart';
 import '../models/transaction.dart';
-import '../models/statistics.dart';
 
 class StorageService {
   static const String _customersKey = 'customers';
@@ -20,6 +19,8 @@ class StorageService {
   StorageService._private();
   static final StorageService instance = StorageService._private();
 
+  // ==================== التهيئة ====================
+  
   Future<void> init() async {
     try {
       _prefs = await SharedPreferences.getInstance();
@@ -152,53 +153,6 @@ class StorageService {
     await _saveTransactions(transactions);
   }
 
-  Future<double> getRemainingQuantity(int customerId, String materialName) async {
-    final transactions = await getTransactions();
-    
-    double totalWithdrawn = 0;
-    double totalReturned = 0;
-    
-    for (var t in transactions) {
-      if (t.customerId == customerId && t.materialName == materialName) {
-        if (t.type == TransactionType.withdrawal) {
-          totalWithdrawn += t.quantity;
-        } else {
-          totalReturned += t.quantity;
-        }
-      }
-    }
-    
-    return totalWithdrawn - totalReturned;
-  }
-
-  Future<List<Map<String, dynamic>>> getCustomerRemainingMaterials(int customerId) async {
-    final transactions = await getTransactions();
-    final Map<String, double> remainingMap = {};
-    
-    for (var t in transactions) {
-      if (t.customerId == customerId) {
-        if (t.type == TransactionType.withdrawal) {
-          remainingMap[t.materialName] = (remainingMap[t.materialName] ?? 0) + t.quantity;
-        } else {
-          remainingMap[t.materialName] = (remainingMap[t.materialName] ?? 0) - t.quantity;
-        }
-      }
-    }
-    
-    return remainingMap.entries
-        .where((e) => e.value > 0)
-        .map((e) => {'materialName': e.key, 'remaining': e.value})
-        .toList();
-  }
-  
-  Future<List<Transaction>> getTransactionsByCustomer(int customerId) async {
-    final transactions = await getTransactions();
-    return transactions
-        .where((t) => t.customerId == customerId)
-        .toList()
-      ..sort((a, b) => b.date.compareTo(a.date));
-  }
-  
   Future<Transaction?> getTransactionById(int id) async {
     final transactions = await getTransactions();
     try {
@@ -208,82 +162,83 @@ class StorageService {
     }
   }
 
-  // ==================== الإحصائيات ====================
+  // ==================== الكميات المتبقية ====================
   
-  Future<Statistics> getStatistics() async {
-    final customers = await getCustomers();
+  /// حساب الكمية المتبقية لعميل معين ومادة معينة
+  Future<double> getRemainingQuantity(int customerId, String materialName) async {
     final transactions = await getTransactions();
     
-    double totalRevenue = 0;
-    final Map<String, double> monthlySales = {};
-    final Map<int, double> customerSpending = {};
-    final Map<int, int> customerTransactions = {};
+    double totalWithdrawn = 0;  // إجمالي المسحوب
+    double totalReturned = 0;   // إجمالي المرتجع
     
     for (var t in transactions) {
-      if (t.type == TransactionType.withdrawal) {
-        totalRevenue += t.totalAfterDiscount;
-        
-        final month = t.date.substring(0, 7);
-        monthlySales[month] = (monthlySales[month] ?? 0) + t.totalAfterDiscount;
-        
-        customerSpending[t.customerId] = (customerSpending[t.customerId] ?? 0) + t.totalAfterDiscount;
-        customerTransactions[t.customerId] = (customerTransactions[t.customerId] ?? 0) + 1;
+      if (t.customerId == customerId && t.materialName == materialName) {
+        if (t.type == TransactionType.withdrawal) {
+          totalWithdrawn += t.quantity;
+        } else if (t.type == TransactionType.return_) {
+          totalReturned += t.quantity;
+        }
       }
     }
     
-    final List<TopCustomer> topCustomers = [];
-    for (var customer in customers) {
-      if ((customerTransactions[customer.id] ?? 0) > 0) {
-        topCustomers.add(TopCustomer(
-          name: customer.name,
-          transactionsCount: customerTransactions[customer.id] ?? 0,
-          totalSpent: customerSpending[customer.id] ?? 0,
-        ));
-      }
-    }
-    topCustomers.sort((a, b) => b.totalSpent.compareTo(a.totalSpent));
-    
-    return Statistics(
-      totalCustomers: customers.length,
-      totalTransactions: transactions.length,
-      totalRevenue: totalRevenue,
-      monthlySales: monthlySales,
-      topCustomers: topCustomers.take(5).toList(),
-    );
+    return totalWithdrawn - totalReturned;
   }
 
-  // ==================== التحميل التدريجي والفلاتر ====================
-  
-  Future<List<Transaction>> getTransactionsPaginated({
-    int limit = 20,
-    int offset = 0,
-    TransactionFilter? filter,
-  }) async {
-    var transactions = await getTransactions();
+  /// الحصول على جميع المواد المتبقية لعميل (المواد التي لم يتم إرجاعها بالكامل)
+  Future<List<Map<String, dynamic>>> getCustomerRemainingMaterials(int customerId) async {
+    final transactions = await getTransactions();
+    final Map<String, double> remainingMap = {};
     
-    if (filter != null && filter.hasFilters) {
-      transactions = transactions.where((t) {
-        if (filter.startDate != null) {
-          final filterDate = filter.startDate!.toIso8601String().substring(0, 10);
-          if (t.date.compareTo(filterDate) < 0) return false;
+    for (var t in transactions) {
+      if (t.customerId == customerId) {
+        if (t.type == TransactionType.withdrawal) {
+          remainingMap[t.materialName] = (remainingMap[t.materialName] ?? 0) + t.quantity;
+        } else if (t.type == TransactionType.return_) {
+          remainingMap[t.materialName] = (remainingMap[t.materialName] ?? 0) - t.quantity;
         }
-        if (filter.endDate != null) {
-          final filterDate = filter.endDate!.toIso8601String().substring(0, 10);
-          if (t.date.compareTo(filterDate) > 0) return false;
-        }
-        if (filter.materialName != null && t.materialName != filter.materialName) return false;
-        if (filter.type != null && t.type != filter.type) return false;
-        return true;
-      }).toList();
+      }
     }
     
-    transactions.sort((a, b) => b.date.compareTo(a.date));
-    
-    return transactions.skip(offset).take(limit).toList();
+    // فقط المواد التي لا تزال كميتها متبقية (أكبر من 0)
+    return remainingMap.entries
+        .where((e) => e.value > 0)
+        .map((e) => {
+          'materialName': e.key,
+          'remaining': e.value,
+        })
+        .toList();
+  }
+
+  /// الحصول على جميع معاملات عميل معين (مرتبة حسب التاريخ)
+  Future<List<Transaction>> getTransactionsByCustomer(int customerId) async {
+    final transactions = await getTransactions();
+    return transactions
+        .where((t) => t.customerId == customerId)
+        .toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
+  }
+
+  /// الحصول على معاملات السحب فقط لعميل معين
+  Future<List<Transaction>> getWithdrawalsByCustomer(int customerId) async {
+    final transactions = await getTransactions();
+    return transactions
+        .where((t) => t.customerId == customerId && t.type == TransactionType.withdrawal)
+        .toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
+  }
+
+  /// الحصول على معاملات الإرجاع فقط لعميل معين
+  Future<List<Transaction>> getReturnsByCustomer(int customerId) async {
+    final transactions = await getTransactions();
+    return transactions
+        .where((t) => t.customerId == customerId && t.type == TransactionType.return_)
+        .toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
   }
 
   // ==================== النسخ الاحتياطي ====================
   
+  /// إنشاء نسخة احتياطية من جميع البيانات
   Future<String> backupData() async {
     final customers = await getCustomers();
     final transactions = await getTransactions();
@@ -304,6 +259,7 @@ class StorageService {
     return file.path;
   }
   
+  /// استعادة البيانات من ملف نسخ احتياطي
   Future<bool> restoreData(String filePath) async {
     try {
       final file = File(filePath);
@@ -322,7 +278,48 @@ class StorageService {
       
       return true;
     } catch (e) {
+      if (kDebugMode) print('Restore error: $e');
       return false;
     }
+  }
+
+  // ==================== إحصائيات ====================
+  
+  /// الحصول على إحصائيات عامة
+  Future<Map<String, dynamic>> getStatistics() async {
+    final customers = await getCustomers();
+    final transactions = await getTransactions();
+    
+    int totalWithdrawals = 0;
+    int totalReturns = 0;
+    double totalRevenue = 0;
+    
+    for (var t in transactions) {
+      if (t.type == TransactionType.withdrawal) {
+        totalWithdrawals++;
+        totalRevenue += t.totalAfterDiscount;
+      } else {
+        totalReturns++;
+      }
+    }
+    
+    return {
+      'totalCustomers': customers.length,
+      'totalTransactions': transactions.length,
+      'totalWithdrawals': totalWithdrawals,
+      'totalReturns': totalReturns,
+      'totalRevenue': totalRevenue,
+    };
+  }
+
+  // ==================== مساعدة ====================
+  
+  /// حذف جميع البيانات (لإعادة تعيين التطبيق)
+  Future<void> clearAllData() async {
+    await _prefs.remove(_customersKey);
+    await _prefs.remove(_transactionsKey);
+    await _prefs.remove(_nextCustomerIdKey);
+    await _prefs.remove(_nextTransactionIdKey);
+    if (kDebugMode) print('✅ All data cleared');
   }
 }
