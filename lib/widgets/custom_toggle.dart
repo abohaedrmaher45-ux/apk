@@ -3,87 +3,66 @@ import 'package:flutter/material.dart';
 import '../utils/app_constants.dart';
 
 class CustomToggle extends StatelessWidget {
-  final bool isNewCustomer;
-  final ValueChanged<bool> onToggle;
+  final List<String> options;
+  final int selectedIndex;
+  final Function(int) onChanged;
+  final double height;
+  final double borderRadius;
 
   const CustomToggle({
     super.key,
-    required this.isNewCustomer,
-    required this.onToggle,
+    required this.options,
+    required this.selectedIndex,
+    required this.onChanged,
+    this.height = 48,
+    this.borderRadius = 40,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 52,
+      height: height,
+      padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(borderRadius),
       ),
-      child: Stack(
-        children: [
-          AnimatedAlign(
-            duration: AppConstants.animationDuration,
-            curve: AppConstants.animationCurve,
-            alignment: isNewCustomer ? Alignment.centerRight : Alignment.centerLeft,
-            child: Container(
-              width: MediaQuery.of(context).size.width / 2 - 24,
-              height: 44,
-              margin: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: AppConstants.primaryColor,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppConstants.primaryColor.withOpacity(0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
+      child: Row(
+        children: List.generate(options.length, (index) {
+          final isSelected = selectedIndex == index;
+          return Expanded(
+            child: GestureDetector(
+              onTap: () => onChanged(index),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeInOut,
+                decoration: BoxDecoration(
+                  color: isSelected ? AppConstants.primaryColor : Colors.transparent,
+                  borderRadius: BorderRadius.circular(borderRadius - 4),
+                  boxShadow: isSelected
+                      ? [
+                          BoxShadow(
+                            color: AppConstants.primaryColor.withAlpha(51),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ]
+                      : null,
+                ),
+                child: Center(
+                  child: Text(
+                    options[index],
+                    style: TextStyle(
+                      color: isSelected ? Colors.white : Colors.grey.shade600,
+                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                      fontSize: 14,
+                    ),
                   ),
-                ],
+                ),
               ),
             ),
-          ),
-          Row(
-            children: [
-              Expanded(
-                child: GestureDetector(
-                  onTap: () => onToggle(false),
-                  child: Container(
-                    height: 52,
-                    alignment: Alignment.center,
-                    child: AnimatedDefaultTextStyle(
-                      duration: AppConstants.animationDuration,
-                      style: TextStyle(
-                        color: !isNewCustomer ? Colors.white : Colors.grey.shade600,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
-                      ),
-                      child: const Text('عميل موجود'),
-                    ),
-                  ),
-                ),
-              ),
-              Expanded(
-                child: GestureDetector(
-                  onTap: () => onToggle(true),
-                  child: Container(
-                    height: 52,
-                    alignment: Alignment.center,
-                    child: AnimatedDefaultTextStyle(
-                      duration: AppConstants.animationDuration,
-                      style: TextStyle(
-                        color: isNewCustomer ? Colors.white : Colors.grey.shade600,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
-                      ),
-                      child: const Text('عميل جديد'),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
+          );
+        }),
       ),
     );
   }
