@@ -3,137 +3,126 @@ import 'package:flutter/material.dart';
 import '../utils/app_constants.dart';
 
 class MaterialGrid extends StatelessWidget {
-  final String? selectedMaterial;
-  final Function(String) onMaterialSelected;
-  final int crossAxisCount;
+  final String selectedMaterial;
+  final ValueChanged<String> onMaterialSelected;
 
   const MaterialGrid({
     super.key,
-    this.selectedMaterial,
+    required this.selectedMaterial,
     required this.onMaterialSelected,
-    this.crossAxisCount = 3,
   });
+
+  static const Map<String, IconData> materialIcons = {
+    'حديد': Icons.construction,
+    'اسمنت': Icons.inventory_2,
+    'رمل': Icons.grain,
+    'طوب': Icons.square,
+    'بلاستيك': Icons.polymer,
+    'دهان': Icons.format_paint,
+    'بلاط': Icons.grid_on,
+    'سيراميك': Icons.view_module,
+    'خشب': Icons.forest,
+    'مسامير': Icons.push_pin,
+    'زجاج': Icons.window,
+    'المنيوم': Icons.auto_awesome,
+  };
+
+  static const Map<String, Color> materialColors = {
+    'حديد': Color(0xFF8B4513),
+    'اسمنت': Color(0xFF808080),
+    'رمل': Color(0xFFDAA520),
+    'طوب': Color(0xFFB22222),
+    'بلاستيك': Color(0xFFFF69B4),
+    'دهان': Color(0xFF4169E1),
+    'بلاط': Color(0xFF20B2AA),
+    'سيراميك': Color(0xFF4682B4),
+    'خشب': Color(0xFF8B6914),
+    'مسامير': Color(0xFF708090),
+    'زجاج': Color(0xFF87CEEB),
+    'المنيوم': Color(0xFFC0C0C0),
+  };
 
   @override
   Widget build(BuildContext context) {
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: crossAxisCount,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: 1.2,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        childAspectRatio: 1.1,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
       ),
       itemCount: AppConstants.materialList.length,
       itemBuilder: (context, index) {
         final material = AppConstants.materialList[index];
-        final isSelected = selectedMaterial == material;
-        final unit = AppConstants.getUnit(material);
-        
-        return _buildMaterialCard(material, unit, isSelected);
+        final isSelected = material == selectedMaterial;
+        final icon = materialIcons[material] ?? Icons.category;
+        final color = materialColors[material] ?? AppConstants.primaryColor;
+
+        return GestureDetector(
+          onTap: () => onMaterialSelected(material),
+          child: AnimatedContainer(
+            duration: AppConstants.animationDuration,
+            curve: AppConstants.animationCurve,
+            decoration: BoxDecoration(
+              color: isSelected ? color.withOpacity(0.15) : Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: isSelected ? color : Colors.grey.shade200,
+                width: isSelected ? 2.5 : 1,
+              ),
+              boxShadow: isSelected
+                  ? [
+                      BoxShadow(
+                        color: color.withOpacity(0.3),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ]
+                  : [
+                      BoxShadow(
+                        color: Colors.grey.shade100,
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                AnimatedScale(
+                  duration: AppConstants.animationDuration,
+                  scale: isSelected ? 1.2 : 1.0,
+                  child: Icon(
+                    icon,
+                    size: 32,
+                    color: isSelected ? color : Colors.grey.shade400,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  material,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                    color: isSelected ? color : Colors.grey.shade600,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  AppConstants.getUnit(material),
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: Colors.grey.shade400,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
       },
     );
-  }
-
-  Widget _buildMaterialCard(String material, String unit, bool isSelected) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      curve: Curves.easeInOut,
-      decoration: BoxDecoration(
-        gradient: isSelected
-            ? LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  AppConstants.primaryColor,
-                  AppConstants.primaryColor.withBlue(80),
-                ],
-              )
-            : null,
-        color: isSelected ? null : Colors.grey.shade50,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isSelected
-              ? AppConstants.primaryColor
-              : Colors.grey.shade200,
-          width: isSelected ? 2 : 1,
-        ),
-        boxShadow: isSelected
-            ? [
-                BoxShadow(
-                  color: AppConstants.primaryColor.withAlpha(51),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ]
-            : null,
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => onMaterialSelected(material),
-          borderRadius: BorderRadius.circular(16),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                _getMaterialIcon(material),
-                size: 32,
-                color: isSelected ? Colors.white : AppConstants.primaryColor,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                material,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                  color: isSelected ? Colors.white : Colors.black87,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                unit,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: isSelected ? Colors.white70 : Colors.grey.shade500,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  IconData _getMaterialIcon(String material) {
-    switch (material) {
-      case 'حديد':
-        return Icons.hardware;
-      case 'اسمنت':
-        return Icons.business;
-      case 'رمل':
-        return Icons.grain;
-      case 'طوب':
-        return Icons.crop_square;
-      case 'بلاستيك':
-        return Icons.polymer;
-      case 'دهان':
-        return Icons.format_paint;
-      case 'بلاط':
-        return Icons.grid_on;
-      case 'سيراميك':
-        return Icons.grid_3x3;
-      case 'خشب':
-        return Icons.forest;
-      case 'مسامير':
-        return Icons.circle;
-      case 'زجاج':
-        return Icons.flip;
-      case 'المنيوم':
-        return Icons.square;
-      default:
-        return Icons.category;
-    }
   }
 }
