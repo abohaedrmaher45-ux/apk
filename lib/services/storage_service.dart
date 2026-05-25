@@ -4,8 +4,10 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:intl/intl.dart';
 import '../models/customer.dart';
 import '../models/transaction.dart';
+import '../models/statistics.dart';  // ✅ تمت الإضافة
 
 class StorageService {
   static const String _customersKey = 'customers';
@@ -164,12 +166,11 @@ class StorageService {
 
   // ==================== الكميات المتبقية ====================
   
-  /// حساب الكمية المتبقية لعميل معين ومادة معينة
   Future<double> getRemainingQuantity(int customerId, String materialName) async {
     final transactions = await getTransactions();
     
-    double totalWithdrawn = 0;  // إجمالي المسحوب
-    double totalReturned = 0;   // إجمالي المرتجع
+    double totalWithdrawn = 0;
+    double totalReturned = 0;
     
     for (var t in transactions) {
       if (t.customerId == customerId && t.materialName == materialName) {
@@ -184,7 +185,6 @@ class StorageService {
     return totalWithdrawn - totalReturned;
   }
 
-  /// الحصول على جميع المواد المتبقية لعميل (المواد التي لم يتم إرجاعها بالكامل)
   Future<List<Map<String, dynamic>>> getCustomerRemainingMaterials(int customerId) async {
     final transactions = await getTransactions();
     final Map<String, double> remainingMap = {};
@@ -199,7 +199,6 @@ class StorageService {
       }
     }
     
-    // فقط المواد التي لا تزال كميتها متبقية (أكبر من 0)
     return remainingMap.entries
         .where((e) => e.value > 0)
         .map((e) => {
@@ -209,7 +208,6 @@ class StorageService {
         .toList();
   }
 
-  /// الحصول على جميع معاملات عميل معين (مرتبة حسب التاريخ)
   Future<List<Transaction>> getTransactionsByCustomer(int customerId) async {
     final transactions = await getTransactions();
     return transactions
@@ -218,7 +216,6 @@ class StorageService {
       ..sort((a, b) => b.date.compareTo(a.date));
   }
 
-  /// الحصول على معاملات السحب فقط لعميل معين
   Future<List<Transaction>> getWithdrawalsByCustomer(int customerId) async {
     final transactions = await getTransactions();
     return transactions
@@ -227,7 +224,6 @@ class StorageService {
       ..sort((a, b) => b.date.compareTo(a.date));
   }
 
-  /// الحصول على معاملات الإرجاع فقط لعميل معين
   Future<List<Transaction>> getReturnsByCustomer(int customerId) async {
     final transactions = await getTransactions();
     return transactions
@@ -236,9 +232,42 @@ class StorageService {
       ..sort((a, b) => b.date.compareTo(a.date));
   }
 
+  // ==================== التحميل التدريجي والفلاتر ====================
+  
+  Future<List<Transaction>> getTransactionsPaginated({
+    int limit = 20,
+    int offset = 0,
+    TransactionFilter? filter,
+  }) async {
+    var transactions = await getTransactions();
+    
+    if (filter != null) {
+      if (filter.startDate != null) {
+        final startDateStr = DateFormat('yyyy-MM-dd').format(filter.startDate!);
+        transactions = transactions.where((t) => t.date.compareTo(startDateStr) >= 0).toList();
+      }
+      
+      if (filter.endDate != null) {
+        final endDateStr = DateFormat('yyyy-MM-dd').format(filter.endDate!);
+        transactions = transactions.where((t) => t.date.compareTo(endDateStr) <= 0).toList();
+      }
+      
+      if (filter.materialName != null && filter.materialName!.isNotEmpty) {
+        transactions = transactions.where((t) => t.materialName == filter.materialName).toList();
+      }
+      
+      if (filter.type != null) {
+        transactions = transactions.where((t) => t.type == filter.type).toList();
+      }
+    }
+    
+    transactions.sort((a, b) => b.date.compareTo(a.date));
+    
+    return transactions.skip(offset).take(limit).toList();
+  }
+
   // ==================== النسخ الاحتياطي ====================
   
-  /// إنشاء نسخة احتياطية من جميع البيانات
   Future<String> backupData() async {
     final customers = await getCustomers();
     final transactions = await getTransactions();
@@ -259,7 +288,6 @@ class StorageService {
     return file.path;
   }
   
-  /// استعادة البيانات من ملف نسخ احتياطي
   Future<bool> restoreData(String filePath) async {
     try {
       final file = File(filePath);
@@ -285,7 +313,6 @@ class StorageService {
 
   // ==================== إحصائيات ====================
   
-  /// الحصول على إحصائيات عامة
   Future<Map<String, dynamic>> getStatistics() async {
     final customers = await getCustomers();
     final transactions = await getTransactions();
@@ -314,7 +341,6 @@ class StorageService {
 
   // ==================== مساعدة ====================
   
-  /// حذف جميع البيانات (لإعادة تعيين التطبيق)
   Future<void> clearAllData() async {
     await _prefs.remove(_customersKey);
     await _prefs.remove(_transactionsKey);

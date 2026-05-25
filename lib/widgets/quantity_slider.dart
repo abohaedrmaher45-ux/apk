@@ -28,7 +28,7 @@ class _QuantitySliderState extends State<QuantitySlider> {
   @override
   void initState() {
     super.initState();
-    _currentValue = widget.initialValue;
+    _currentValue = widget.initialValue.clamp(0.0, widget.maxQuantity);
     _controller.text = _currentValue.toStringAsFixed(2);
   }
 
@@ -36,7 +36,7 @@ class _QuantitySliderState extends State<QuantitySlider> {
   void didUpdateWidget(QuantitySlider oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.initialValue != widget.initialValue) {
-      _currentValue = widget.initialValue;
+      _currentValue = widget.initialValue.clamp(0.0, widget.maxQuantity);
       _controller.text = _currentValue.toStringAsFixed(2);
     }
   }
@@ -48,11 +48,12 @@ class _QuantitySliderState extends State<QuantitySlider> {
   }
 
   void _updateValue(double value) {
+    final clamped = value.clamp(0.0, widget.maxQuantity);
     setState(() {
-      _currentValue = value;
-      _controller.text = value.toStringAsFixed(2);
+      _currentValue = clamped;
+      _controller.text = clamped.toStringAsFixed(2);
     });
-    widget.onChanged(value);
+    widget.onChanged(clamped);
     HapticFeedback.lightImpact();
   }
 
@@ -69,7 +70,7 @@ class _QuantitySliderState extends State<QuantitySlider> {
             _buildButton(
               icon: Icons.remove,
               onPressed: _currentValue > 0
-                  ? () => _updateValue((_currentValue - 1).clamp(0, widget.maxQuantity))
+                  ? () => _updateValue(_currentValue - 1)
                   : null,
             ),
             Expanded(
@@ -103,10 +104,12 @@ class _QuantitySliderState extends State<QuantitySlider> {
                     contentPadding: const EdgeInsets.symmetric(vertical: 12),
                   ),
                   onChanged: (value) {
-                    final parsed = double.tryParse(value) ?? 0;
-                    final clamped = parsed.clamp(0, widget.maxQuantity);
-                    setState(() => _currentValue = clamped);
-                    widget.onChanged(clamped);
+                    final parsed = double.tryParse(value);
+                    if (parsed != null) {
+                      final clamped = parsed.clamp(0.0, widget.maxQuantity);
+                      setState(() => _currentValue = clamped);
+                      widget.onChanged(clamped);
+                    }
                   },
                 ),
               ),
@@ -114,7 +117,7 @@ class _QuantitySliderState extends State<QuantitySlider> {
             _buildButton(
               icon: Icons.add,
               onPressed: _currentValue < widget.maxQuantity
-                  ? () => _updateValue((_currentValue + 1).clamp(0, widget.maxQuantity))
+                  ? () => _updateValue(_currentValue + 1)
                   : null,
             ),
           ],

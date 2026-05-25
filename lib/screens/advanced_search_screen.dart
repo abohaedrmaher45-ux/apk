@@ -180,15 +180,22 @@ class _AdvancedSearchScreenState extends State<AdvancedSearchScreen> {
   
   Future<void> _search() async {
     setState(() => _isSearching = true);
-    final results = await storage.getTransactionsPaginated(
-      limit: 1000,
-      offset: 0,
-      filter: _filter,
-    );
-    setState(() {
-      _results = results;
-      _isSearching = false;
-    });
+    try {
+      final results = await storage.getTransactionsPaginated(
+        limit: 1000,
+        offset: 0,
+        filter: _filter,
+      );
+      setState(() {
+        _results = results;
+        _isSearching = false;
+      });
+    } catch (e) {
+      setState(() => _isSearching = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('حدث خطأ: $e')),
+      );
+    }
   }
   
   void _clearFilters() {
