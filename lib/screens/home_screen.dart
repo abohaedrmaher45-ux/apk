@@ -1,15 +1,14 @@
 // lib/screens/home_screen.dart
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import '../services/storage_service.dart';
 import '../models/customer.dart';
 import '../models/transaction.dart';
 import '../utils/app_constants.dart';
-import '../widgets/custom_toggle.dart';
-import '../widgets/material_grid.dart';
 import '../widgets/animated_summary.dart';
+import '../widgets/custom_toggle.dart';
+import '../widgets/quantity_slider.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -21,23 +20,27 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final StorageService storage = StorageService.instance;
   final _formKey = GlobalKey<FormState>();
-
-  List<Customer> _customers = [];
-  int? _selectedCustomerId;
-  bool _isNewCustomer = false;
-  final TextEditingController _newNameController = TextEditingController();
-  final TextEditingController _newPhoneController = TextEditingController();
-
-  String _selectedMaterial = AppConstants.materialList[0];
+  
+  // Controllers
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _materialController = TextEditingController();
   final TextEditingController _quantityController = TextEditingController();
   final TextEditingController _priceController = TextEditingController();
-  final TextEditingController _discountController = TextEditingController(text: '0');
+  final TextEditingController _discountController = TextEditingController();
   final TextEditingController _noteController = TextEditingController();
-
+  
+  // Variables
+  int? _selectedCustomerId;
   DateTime _startDate = DateTime.now();
   DateTime _returnDate = DateTime.now().add(const Duration(days: 30));
-
+  double _quantity = 0;
+  double _price = 0;
+  double _discount = 0;
+  bool _isNewCustomer = false;
   bool _isLoading = false;
+  
+  List<Customer> _customers = [];
   bool _isLoadingCustomers = true;
 
   @override
@@ -48,8 +51,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
-    _newNameController.dispose();
-    _newPhoneController.dispose();
+    _nameController.dispose();
+    _phoneController.dispose();
+    _materialController.dispose();
     _quantityController.dispose();
     _priceController.dispose();
     _discountController.dispose();
@@ -68,234 +72,109 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _saveWithdrawal() async {
     if (!_formKey.currentState!.validate()) return;
-
-    final confirmed = await _showConfirmationDialog();
-    if (!confirmed) return;
-
+    
     setState(() => _isLoading = true);
-
+    
     try {
       int customerId = _selectedCustomerId ?? 0;
-
+      
       if (_isNewCustomer) {
-        String name = _newNameController.text.trim();
+        String name = _nameController.text.trim();
         if (name.isEmpty) {
-          _showToast('الرجاء ادخال اسم العميل');
+          _showToast('الرجاء إدخال اسم العميل');
           setState(() => _isLoading = false);
           return;
         }
-
+        
         int newId = await storage.getNextCustomerId();
         Customer newCustomer = Customer(
           id: newId,
           name: name,
-          phone: _newPhoneController.text.trim().isEmpty
-              ? null
-              : _newPhoneController.text.trim(),
+          phone: _phoneController.text.trim().isEmpty ? null : _phoneController.text.trim(),
           createdAt: DateFormat('yyyy-MM-dd').format(DateTime.now()),
         );
         await storage.addCustomer(newCustomer);
         customerId = newId;
         await _loadCustomers();
-
+        
         setState(() {
           _isNewCustomer = false;
-          _newNameController.clear();
-          _newPhoneController.clear();
+          _nameController.clear();
+          _phoneController.clear();
           _selectedCustomerId = newId;
         });
       }
-
+      
       if (customerId == 0) {
         _showToast('الرجاء اختيار عميل');
         setState(() => _isLoading = false);
         return;
       }
-
-      double quantity = double.tryParse(_quantityController.text) ?? 0;
-      double price = double.tryParse(_priceController.text) ?? 0;
-      double discount = double.tryParse(_discountController.text) ?? 0;
-
-      if (discount > 50) {
-        _showToast('الخصم لا يمكن ان يتجاوز 50%');
+      
+      String materialName = _materialController.text.trim();
+      if (materialName.isEmpty) {
+        _showToast('الرجاء إدخال نوع المادة');
         setState(() => _isLoading = false);
         return;
       }
-
-      if (quantity <= 0) {
-        _showToast('الرجاء ادخال كمية صحيحة');
+      
+      if (_quantity <= 0) {
+        _showToast('الرجاء إدخال كمية صحيحة');
         setState(() => _isLoading = false);
         return;
       }
-
-      if (price <= 0) {
-        _showToast('الرجاء ادخال سعر صحيح');
+      
+      if (_price <= 0) {
+        _showToast('الرجاء إدخال سعر صحيح');
         setState(() => _isLoading = false);
         return;
       }
-
-      if (quantity > 1000) {
-        final confirmLarge = await _showLargeQuantityDialog(quantity);
-        if (!confirmLarge) {
-          setState(() => _isLoading = false);
-          return;
-        }
-      }
-
+      
       int transactionId = await storage.getNextTransactionId();
       Transaction transaction = Transaction(
         id: transactionId,
         customerId: customerId,
-        materialName: _selectedMaterial,
+        materialName: materialName,
         type: TransactionType.withdrawal,
-        quantity: quantity,
-        pricePerUnit: price,
-        discountPercent: discount,
+        quantity: _quantity,
+        pricePerUnit: _price,
+        discountPercent: _discount,
         date: DateFormat('yyyy-MM-dd').format(_startDate),
         returnDate: DateFormat('yyyy-MM-dd').format(_returnDate),
         actualReturnDate: null,
         note: _noteController.text.isEmpty ? null : _noteController.text,
         linkedWithdrawalId: null,
       );
-
+      
       await storage.addTransaction(transaction);
-      HapticFeedback.heavyImpact();
-      _showToast('تم حفظ عملية السحب بنجاح');
+      _showToast('✅ تم حفظ عملية السحب بنجاح');
       _resetForm();
+      
     } catch (e) {
-      _showToast('خطأ: $e');
+      _showToast('❌ حدث خطأ: $e');
     } finally {
       setState(() => _isLoading = false);
     }
   }
-
-  Future<bool> _showConfirmationDialog() async {
-    final quantity = double.tryParse(_quantityController.text) ?? 0;
-    final price = double.tryParse(_priceController.text) ?? 0;
-    final discount = double.tryParse(_discountController.text) ?? 0;
-    final total = quantity * price;
-    final discountAmount = total * (discount / 100);
-    final finalTotal = total - discountAmount;
-
-    final customerName = _isNewCustomer
-        ? _newNameController.text.trim()
-        : _customers.firstWhere(
-            (c) => c.id == _selectedCustomerId,
-            orElse: () => Customer(id: 0, name: 'غير معروف', createdAt: ''),
-          ).name;
-
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: Row(
-          children: [
-            Icon(Icons.receipt_long, color: AppConstants.primaryColor),
-            const SizedBox(width: 8),
-            const Text('تأكيد العملية'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildConfirmRow('العميل:', customerName),
-            _buildConfirmRow('المادة:', _selectedMaterial),
-            _buildConfirmRow('الكمية:', '$quantity ${AppConstants.getUnit(_selectedMaterial)}'),
-            const Divider(height: 24),
-            _buildConfirmRow('الاجمالي:', '${total.toStringAsFixed(2)} ${AppConstants.currencySymbol}'),
-            if (discount > 0)
-              _buildConfirmRow('الخصم:', '-${discountAmount.toStringAsFixed(2)} ${AppConstants.currencySymbol}', color: AppConstants.dangerColor),
-            const Divider(height: 24),
-            _buildConfirmRow('الصافي:', '${finalTotal.toStringAsFixed(2)} ${AppConstants.currencySymbol}', isBold: true, color: AppConstants.successColor),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('الغاء'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppConstants.primaryColor,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            child: const Text('تأكيد الحفظ'),
-          ),
-        ],
-      ),
-    );
-    return result ?? false;
-  }
-
-  Future<bool> _showLargeQuantityDialog(double quantity) async {
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: Row(
-          children: [
-            Icon(Icons.warning_amber, color: AppConstants.secondaryColor),
-            const SizedBox(width: 8),
-            const Text('كمية كبيرة'),
-          ],
-        ),
-        content: Text('الكمية المدخلة ($quantity) اكبر من المتوسط. هل انت متأكد؟'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('تعديل'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppConstants.secondaryColor,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            child: const Text('نعم، متأكد'),
-          ),
-        ],
-      ),
-    );
-    return result ?? false;
-  }
-
-  Widget _buildConfirmRow(String label, String value, {bool isBold = false, Color? color}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: TextStyle(color: Colors.grey.shade600)),
-          Text(
-            value,
-            style: TextStyle(
-              fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
-              color: color ?? Colors.black87,
-              fontSize: isBold ? 16 : 14,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
+  
   void _resetForm() {
     _formKey.currentState?.reset();
     setState(() {
       _isNewCustomer = false;
       _selectedCustomerId = null;
-      _selectedMaterial = AppConstants.materialList[0];
       _startDate = DateTime.now();
       _returnDate = DateTime.now().add(const Duration(days: 30));
+      _quantity = 0;
+      _price = 0;
+      _discount = 0;
+      _materialController.clear();
       _quantityController.clear();
       _priceController.clear();
-      _discountController.text = '0';
+      _discountController.clear();
       _noteController.clear();
     });
   }
-
+  
   void _showToast(String msg) {
     Fluttertoast.showToast(msg: msg, gravity: ToastGravity.BOTTOM);
   }
@@ -317,24 +196,23 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       body: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
         padding: const EdgeInsets.all(16),
         child: Form(
           key: _formKey,
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildCustomerSection(),
               const SizedBox(height: 20),
               _buildMaterialSection(),
               const SizedBox(height: 20),
-              _buildDatesSection(),
-              const SizedBox(height: 20),
-              _buildNoteSection(),
-              const SizedBox(height: 20),
-              _buildSummarySection(),
+              AnimatedSummary(
+                quantity: _quantity,
+                price: _price,
+                discount: _discount,
+              ),
               const SizedBox(height: 30),
               _buildSaveButton(),
-              const SizedBox(height: 20),
             ],
           ),
         ),
@@ -353,8 +231,19 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             Row(
               children: [
-                Icon(Icons.person_outline, color: AppConstants.primaryColor, size: 22),
-                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppConstants.primaryColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    Icons.person,
+                    color: AppConstants.primaryColor,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
                 const Text(
                   'معلومات العميل',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -362,96 +251,63 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
             const SizedBox(height: 20),
+            
+            // Custom Toggle Widget
             CustomToggle(
               isNewCustomer: _isNewCustomer,
-              onToggle: (value) => setState(() => _isNewCustomer = value),
+              onToggle: (value) {
+                setState(() {
+                  _isNewCustomer = value;
+                  if (!value) {
+                    _selectedCustomerId = null;
+                  }
+                });
+              },
             ),
             const SizedBox(height: 20),
+            
             if (!_isNewCustomer)
-              _isLoadingCustomers
-                  ? const Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(16),
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    )
-                  : DropdownButtonFormField<int>(
-                      decoration: InputDecoration(
-                        labelText: 'اختر العميل',
-                        prefixIcon: const Icon(Icons.person_search),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          borderSide: BorderSide.none,
-                        ),
-                        filled: true,
-                        fillColor: Colors.grey.shade50,
-                      ),
-                      value: _selectedCustomerId,
-                      items: [
-                        const DropdownMenuItem(
-                          value: null,
-                          child: Text('-- اختر عميل --', style: TextStyle(color: Colors.grey)),
-                        ),
-                        ..._customers.map((c) => DropdownMenuItem(
-                          value: c.id,
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 32,
-                                height: 32,
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [AppConstants.primaryColor, Color(0xFF3A5F8F)],
-                                  ),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    c.name.isNotEmpty ? c.name[0] : '?',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Text(c.name),
-                            ],
-                          ),
-                        )),
-                      ],
-                      onChanged: (value) => setState(() => _selectedCustomerId = value),
-                      validator: (value) => value == null ? 'الرجاء اختيار عميل' : null,
-                    ),
+              DropdownButtonFormField<int>(
+                decoration: const InputDecoration(
+                  labelText: 'اختر العميل',
+                  prefixIcon: Icon(Icons.people_outline),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.all(Radius.circular(12)),
+                  ),
+                ),
+                value: _selectedCustomerId,
+                items: [
+                  const DropdownMenuItem(value: null, child: Text('-- اختر عميل --')),
+                  ..._customers.map((c) => DropdownMenuItem(
+                    value: c.id,
+                    child: Text(c.name),
+                  )),
+                ],
+                onChanged: (value) => setState(() => _selectedCustomerId = value),
+                validator: (value) => value == null ? 'الرجاء اختيار عميل' : null,
+              ),
+            
             if (_isNewCustomer) ...[
               TextFormField(
-                controller: _newNameController,
-                decoration: InputDecoration(
-                  labelText: 'اسم العميل *',
-                  prefixIcon: const Icon(Icons.person_add),
+                controller: _nameController,
+                decoration: const InputDecoration(
+                  labelText: 'اسم العميل',
+                  prefixIcon: Icon(Icons.person_add),
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide.none,
+                    borderRadius: BorderRadius.all(Radius.circular(12)),
                   ),
-                  filled: true,
-                  fillColor: Colors.grey.shade50,
                 ),
-                validator: (value) => value?.trim().isEmpty == true ? 'الرجاء ادخال اسم العميل' : null,
+                validator: (value) => value?.trim().isEmpty == true ? 'الرجاء إدخال اسم العميل' : null,
               ),
               const SizedBox(height: 12),
               TextFormField(
-                controller: _newPhoneController,
-                decoration: InputDecoration(
+                controller: _phoneController,
+                decoration: const InputDecoration(
                   labelText: 'رقم الهاتف (اختياري)',
-                  prefixIcon: const Icon(Icons.phone),
+                  prefixIcon: Icon(Icons.phone),
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide.none,
+                    borderRadius: BorderRadius.all(Radius.circular(12)),
                   ),
-                  filled: true,
-                  fillColor: Colors.grey.shade50,
                 ),
                 keyboardType: TextInputType.phone,
               ),
@@ -473,347 +329,219 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             Row(
               children: [
-                Icon(Icons.category_outlined, color: AppConstants.primaryColor, size: 22),
-                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppConstants.primaryColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    Icons.inventory,
+                    color: AppConstants.primaryColor,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
                 const Text(
-                  'اختيار المادة',
+                  'معلومات السحب',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
               ],
             ),
+            const SizedBox(height: 20),
+            
+            // نوع المادة - كتابة يدوية
+            TextFormField(
+              controller: _materialController,
+              decoration: const InputDecoration(
+                labelText: 'نوع المادة *',
+                prefixIcon: Icon(Icons.edit_note),
+                hintText: 'مثال: حديد 6 مم، اسمنت عادي، خشب بناء...',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(12)),
+                ),
+              ),
+              validator: (value) => value?.trim().isEmpty == true ? 'الرجاء إدخال نوع المادة' : null,
+            ),
             const SizedBox(height: 16),
-            MaterialGrid(
-              selectedMaterial: _selectedMaterial,
-              onMaterialSelected: (material) {
-                setState(() => _selectedMaterial = material);
-                HapticFeedback.selectionClick();
+            
+            // Quantity Slider Widget
+            QuantitySlider(
+              maxQuantity: 1000,
+              initialValue: _quantity,
+              unit: 'وحدة',
+              onChanged: (value) {
+                setState(() {
+                  _quantity = value;
+                  _quantityController.text = value.toString();
+                });
               },
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
+            
+            // سعر الفرد
+            TextFormField(
+              controller: _priceController,
+              decoration: InputDecoration(
+                labelText: 'سعر الفرد',
+                prefixIcon: const Icon(Icons.attach_money),
+                suffixText: AppConstants.currencySymbol,
+                border: const OutlineInputBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(12)),
+                ),
+              ),
+              keyboardType: TextInputType.number,
+              onChanged: (v) => _price = double.tryParse(v) ?? 0,
+              validator: (value) {
+                if (value == null || value.isEmpty) return 'الرجاء إدخال السعر';
+                final val = double.tryParse(value);
+                if (val == null) return 'الرجاء إدخال رقم صحيح';
+                if (val <= 0) return 'السعر يجب أن يكون أكبر من 0';
+                return null;
+              },
+            ),
+            const SizedBox(height: 16),
+            
+            // الخصم
+            TextFormField(
+              controller: _discountController,
+              decoration: const InputDecoration(
+                labelText: 'الخصم (%)',
+                prefixIcon: Icon(Icons.percent),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(12)),
+                ),
+              ),
+              keyboardType: TextInputType.number,
+              onChanged: (v) => _discount = double.tryParse(v) ?? 0,
+            ),
+            const SizedBox(height: 16),
+            
+            // التواريخ
             Row(
               children: [
                 Expanded(
-                  child: TextFormField(
-                    controller: _quantityController,
-                    decoration: InputDecoration(
-                      labelText: 'الكمية *',
-                      suffixText: AppConstants.getUnit(_selectedMaterial),
-                      prefixIcon: const Icon(Icons.scale),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: BorderSide.none,
-                      ),
-                      filled: true,
-                      fillColor: Colors.grey.shade50,
-                    ),
-                    keyboardType: TextInputType.number,
-                    validator: (value) {
-                      if (value == null || value.isEmpty) return 'الرجاء ادخال الكمية';
-                      final q = double.tryParse(value);
-                      if (q == null || q <= 0) return 'كمية غير صحيحة';
-                      return null;
+                  child: InkWell(
+                    onTap: () async {
+                      DateTime? picked = await showDatePicker(
+                        context: context,
+                        initialDate: _startDate,
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime(2030),
+                        builder: (context, child) {
+                          return Theme(
+                            data: Theme.of(context).copyWith(
+                              colorScheme: const ColorScheme.light(primary: AppConstants.primaryColor),
+                            ),
+                            child: child!,
+                          );
+                        },
+                      );
+                      if (picked != null) setState(() => _startDate = picked);
                     },
-                    onChanged: (_) => setState(() {}),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.shade300),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.calendar_today, size: 18, color: AppConstants.primaryColor),
+                          const SizedBox(width: 8),
+                          Text(DateFormat('yyyy-MM-dd').format(_startDate)),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: TextFormField(
-                    controller: _priceController,
-                    decoration: InputDecoration(
-                      labelText: 'سعر الفرد *',
-                      suffixText: AppConstants.currencySymbol,
-                      prefixIcon: const Icon(Icons.attach_money),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: BorderSide.none,
-                      ),
-                      filled: true,
-                      fillColor: Colors.grey.shade50,
-                    ),
-                    keyboardType: TextInputType.number,
-                    validator: (value) {
-                      if (value == null || value.isEmpty) return 'الرجاء ادخال السعر';
-                      final p = double.tryParse(value);
-                      if (p == null || p <= 0) return 'سعر غير صحيح';
-                      return null;
+                  child: InkWell(
+                    onTap: () async {
+                      DateTime? picked = await showDatePicker(
+                        context: context,
+                        initialDate: _returnDate,
+                        firstDate: DateTime.now(),
+                        lastDate: DateTime(2030),
+                        builder: (context, child) {
+                          return Theme(
+                            data: Theme.of(context).copyWith(
+                              colorScheme: const ColorScheme.light(primary: AppConstants.dangerColor),
+                            ),
+                            child: child!,
+                          );
+                        },
+                      );
+                      if (picked != null) setState(() => _returnDate = picked);
                     },
-                    onChanged: (_) => setState(() {}),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _discountController,
-              decoration: InputDecoration(
-                labelText: 'الخصم (%) - الحد الاقصى 50%',
-                prefixIcon: const Icon(Icons.local_offer),
-                suffixText: '%',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide.none,
-                ),
-                filled: true,
-                fillColor: Colors.grey.shade50,
-              ),
-              keyboardType: TextInputType.number,
-              validator: (value) {
-                final d = double.tryParse(value ?? '0') ?? 0;
-                if (d > 50) return 'الخصم لا يتجاوز 50%';
-                return null;
-              },
-              onChanged: (_) => setState(() {}),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDatesSection() {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.date_range, color: AppConstants.primaryColor, size: 22),
-                const SizedBox(width: 8),
-                const Text(
-                  'الفترة الزمنية',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade50,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      _buildDateNode(
-                        date: _startDate,
-                        label: 'تاريخ السحب',
-                        icon: Icons.play_circle_outline,
-                        color: AppConstants.successColor,
-                        onTap: () async {
-                          DateTime? picked = await showDatePicker(
-                            context: context,
-                            initialDate: _startDate,
-                            firstDate: DateTime(2020),
-                            lastDate: DateTime(2030),
-                            builder: (context, child) {
-                              return Theme(
-                                data: Theme.of(context).copyWith(
-                                  colorScheme: const ColorScheme.light(
-                                    primary: AppConstants.primaryColor,
-                                  ),
-                                ),
-                                child: child!,
-                              );
-                            },
-                          );
-                          if (picked != null) {
-                            setState(() {
-                              _startDate = picked;
-                              if (_returnDate.isBefore(_startDate)) {
-                                _returnDate = _startDate.add(const Duration(days: 30));
-                              }
-                            });
-                          }
-                        },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.shade300),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      Expanded(
-                        child: Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 8),
-                          child: Column(
-                            children: [
-                              Text(
-                                '${_returnDate.difference(_startDate).inDays} يوم',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey.shade500,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Container(
-                                height: 3,
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      AppConstants.successColor,
-                                      AppConstants.secondaryColor,
-                                    ],
-                                  ),
-                                  borderRadius: BorderRadius.circular(2),
-                                ),
-                              ),
-                            ],
+                      child: Row(
+                        children: [
+                          Icon(Icons.calendar_today, size: 18, color: AppConstants.dangerColor),
+                          const SizedBox(width: 8),
+                          Text(
+                            DateFormat('yyyy-MM-dd').format(_returnDate),
+                            style: const TextStyle(color: AppConstants.dangerColor),
                           ),
-                        ),
+                        ],
                       ),
-                      _buildDateNode(
-                        date: _returnDate,
-                        label: 'تاريخ العودة',
-                        icon: Icons.flag,
-                        color: AppConstants.secondaryColor,
-                        onTap: () async {
-                          DateTime? picked = await showDatePicker(
-                            context: context,
-                            initialDate: _returnDate,
-                            firstDate: _startDate,
-                            lastDate: DateTime(2030),
-                            builder: (context, child) {
-                              return Theme(
-                                data: Theme.of(context).copyWith(
-                                  colorScheme: const ColorScheme.light(
-                                    primary: AppConstants.primaryColor,
-                                  ),
-                                ),
-                                child: child!,
-                              );
-                            },
-                          );
-                          if (picked != null) setState(() => _returnDate = picked);
-                        },
-                      ),
-                    ],
+                    ),
                   ),
-                ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            
+            // ملاحظة
+            TextFormField(
+              controller: _noteController,
+              decoration: const InputDecoration(
+                labelText: 'ملاحظة',
+                prefixIcon: Icon(Icons.note_add),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(12)),
+                ),
               ),
+              maxLines: 2,
             ),
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildDateNode({
-    required DateTime date,
-    required String label,
-    required IconData icon,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withOpacity(0.3)),
-        ),
-        child: Column(
-          children: [
-            Icon(icon, color: color, size: 24),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                color: Colors.grey.shade600,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              DateFormat('yyyy-MM-dd').format(date),
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNoteSection() {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: TextFormField(
-          controller: _noteController,
-          decoration: InputDecoration(
-            labelText: 'ملاحظة (اختياري)',
-            prefixIcon: const Icon(Icons.notes),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(16),
-              borderSide: BorderSide.none,
-            ),
-            filled: true,
-            fillColor: Colors.grey.shade50,
-          ),
-          maxLines: 2,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSummarySection() {
-    final quantity = double.tryParse(_quantityController.text) ?? 0;
-    final price = double.tryParse(_priceController.text) ?? 0;
-    final discount = double.tryParse(_discountController.text) ?? 0;
-
-    return AnimatedSummary(
-      quantity: quantity,
-      price: price,
-      discount: discount,
     );
   }
 
   Widget _buildSaveButton() {
     return SizedBox(
       width: double.infinity,
-      height: 56,
+      height: 55,
       child: ElevatedButton(
         onPressed: _isLoading ? null : _saveWithdrawal,
         style: ElevatedButton.styleFrom(
           backgroundColor: AppConstants.primaryColor,
-          foregroundColor: Colors.white,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          elevation: 4,
-          shadowColor: AppConstants.primaryColor.withOpacity(0.4),
+          elevation: 2,
         ),
         child: _isLoading
-            ? const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(
-                      color: Colors.white,
-                      strokeWidth: 2,
-                    ),
-                  ),
-                  SizedBox(width: 12),
-                  Text('جاري الحفظ...', style: TextStyle(fontSize: 16)),
-                ],
+            ? const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  color: Colors.white,
+                  strokeWidth: 2,
+                ),
               )
             : const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.save, size: 22),
+                  Icon(Icons.save, size: 20),
                   SizedBox(width: 8),
-                  Text(
-                    'حفظ عملية السحب',
-                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
-                  ),
+                  Text('💾 حفظ عملية السحب', style: TextStyle(fontSize: 16)),
                 ],
               ),
       ),

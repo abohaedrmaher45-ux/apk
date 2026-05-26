@@ -13,306 +13,173 @@ class CustomersListScreen extends StatefulWidget {
 
 class _CustomersListScreenState extends State<CustomersListScreen> {
   final StorageService storage = StorageService.instance;
-  List<Customer> customers = [];
-  String searchQuery = '';
-  bool isLoading = true;
+  List<Customer> _customers = [];
+  Map<int, List<Map<String, dynamic>>> _customerRemainingMaterials = {};
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _loadCustomers();
+    _loadCustomersWithRemaining();
   }
 
-  Future<void> _loadCustomers() async {
-    setState(() => isLoading = true);
-    final loadedCustomers = await storage.getCustomers();
+  Future<void> _loadCustomersWithRemaining() async {
+    setState(() => _isLoading = true);
+    
+    final allCustomers = await storage.getCustomers();
+    final List<Customer> customersWithRemaining = [];
+    
+    for (var customer in allCustomers) {
+      final remaining = await storage.getCustomerRemainingMaterials(customer.id);
+      if (remaining.isNotEmpty) {
+        customersWithRemaining.add(customer);
+        _customerRemainingMaterials[customer.id] = remaining;
+      }
+    }
+    
     setState(() {
-      customers = loadedCustomers;
-      isLoading = false;
+      _customers = customersWithRemaining;
+      _isLoading = false;
     });
   }
 
-  List<Customer> get filteredCustomers {
-    if (searchQuery.isEmpty) return customers;
-    return customers.where((c) => c.name.contains(searchQuery)).toList();
-  }
-
-  Future<void> _editCustomer(Customer customer) async {
-    final nameController = TextEditingController(text: customer.name);
-    final phoneController = TextEditingController(text: customer.phone ?? '');
-    
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('تعديل عميل'),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(labelText: 'الاسم'),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: phoneController,
-              decoration: const InputDecoration(labelText: 'رقم الهاتف'),
-              keyboardType: TextInputType.phone,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('إلغاء'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('حفظ'),
-          ),
-        ],
+  @override
+      Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F7FA),
+      appBar: AppBar(
+        title: const Text('العملاء (الذين لديهم مواد متبقية)'),
+        backgroundColor: AppConstants.primaryColor,
+        foregroundColor: Colors.white,
       ),
-    );
-    
-    if (result == true) {
-      final updatedCustomer = Customer(
-        id: customer.id,
-        name: nameController.text.trim(),
-        phone: phoneController.text.trim().isEmpty ? null : phoneController.text.trim(),
-        createdAt: customer.createdAt,
-      );
-      await storage.updateCustomer(updatedCustomer);
-      await _loadCustomers();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('✅ تم تعديل العميل بنجاح')),
-        );
-      }
-    }
-  }
-
-  Widget _buildCustomerTile(Customer customer) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.shade200,
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(20),
-        child: InkWell(
-          onTap: () => Navigator.pushNamed(
-            context,
-            '/customer_details',
-            arguments: customer.id,
-          ),
-          borderRadius: BorderRadius.circular(20),
-          child: Container(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                // Avatar
-                Container(
-                  width: 50,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [AppConstants.primaryColor, Color(0xFF3A5F8F)],
-                    ),
-                    borderRadius: BorderRadius.circular(15),
-                  ),
-                  child: Center(
-                    child: Text(
-                      customer.name.isNotEmpty ? customer.name[0] : '?',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                // المعلومات
-                Expanded(
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _customers.isEmpty
+              ? const Center(
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
+                      Icon(Icons.check_circle, size: 80, color: Colors.green),
+                      SizedBox(height: 16),
                       Text(
-                        customer.name,
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        'لا يوجد عملاء لديهم مواد متبقية',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                       ),
-                      if (customer.phone != null) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          customer.phone!,
-                          style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
-                        ),
-                      ],
+                      SizedBox(height: 8),
+                      Text('جميع العملاء أنهوا موادهم'),
                     ],
                   ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: _customers.length,
+                  itemBuilder: (context, index) {
+                    final customer = _customers[index];
+                    final remaining = _customerRemainingMaterials[customer.id] ?? [];
+                    return _buildCustomerCard(customer, remaining);
+                  },
                 ),
-                // الأزرار
-                Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.receipt, color: AppConstants.successColor),
-                      onPressed: () => Navigator.pushNamed(
-                        context,
-                        '/return_invoice',
-                        arguments: customer.id,
-                      ),
-                      tooltip: 'فاتورة إرجاع',
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('قائمة العملاء'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.person_add),
-            onPressed: () => Navigator.pushNamed(context, '/'),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // شريط البحث
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: TextField(
-              decoration: InputDecoration(
-                hintText: 'بحث عن عميل...',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: searchQuery.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () => setState(() => searchQuery = ''),
-                      )
-                    : null,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(30),
-                  borderSide: BorderSide.none,
-                ),
-                filled: true,
-                fillColor: Colors.grey.shade100,
-              ),
-              onChanged: (value) => setState(() => searchQuery = value),
-            ),
-          ),
-          
-          // قائمة العملاء
-          Expanded(
-            child: isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : filteredCustomers.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.people_outline, size: 64, color: Colors.grey.shade400),
-                            const SizedBox(height: 16),
-                            Text(
-                              searchQuery.isEmpty ? 'لا يوجد عملاء' : 'لا توجد نتائج',
-                              style: TextStyle(color: Colors.grey.shade600),
-                            ),
-                          ],
+  Widget _buildCustomerCard(Customer customer, List<Map<String, dynamic>> remaining) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: InkWell(
+        onTap: () => Navigator.pushNamed(
+          context,
+          '/customer_details',
+          arguments: customer.id,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 50,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      color: AppConstants.primaryColor.withAlpha(26),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Center(
+                      child: Text(
+                        customer.name.isNotEmpty ? customer.name[0] : '?',
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: AppConstants.primaryColor,
                         ),
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        itemCount: filteredCustomers.length,
-                        itemBuilder: (context, index) {
-                          final customer = filteredCustomers[index];
-                          return Dismissible(
-                            key: Key(customer.id.toString()),
-                            direction: DismissDirection.endToStart,
-                            background: Container(
-                              margin: const EdgeInsets.only(bottom: 12),
-                              decoration: BoxDecoration(
-                                color: Colors.red,
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              alignment: Alignment.centerRight,
-                              padding: const EdgeInsets.only(right: 20),
-                              child: const Icon(Icons.delete, color: Colors.white),
-                            ),
-                            secondaryBackground: Container(
-                              margin: const EdgeInsets.only(bottom: 12),
-                              decoration: BoxDecoration(
-                                color: Colors.blue,
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              alignment: Alignment.centerLeft,
-                              padding: const EdgeInsets.only(left: 20),
-                              child: const Icon(Icons.edit, color: Colors.white),
-                            ),
-                            confirmDismiss: (direction) async {
-                              if (direction == DismissDirection.endToStart) {
-                                final confirmed = await showDialog<bool>(
-                                  context: context,
-                                  builder: (context) => AlertDialog(
-                                    title: const Text('حذف عميل'),
-                                    content: Text('هل أنت متأكد من حذف "${customer.name}"؟ سيتم حذف جميع فواتيره أيضاً.'),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () => Navigator.pop(context, false),
-                                        child: const Text('إلغاء', style: TextStyle(color: Colors.grey)),
-                                      ),
-                                      TextButton(
-                                        onPressed: () => Navigator.pop(context, true),
-                                        child: const Text('حذف', style: TextStyle(color: AppConstants.dangerColor)),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                                if (confirmed == true) {
-                                  setState(() => isLoading = true);
-                                  await storage.deleteCustomer(customer.id);
-                                  await _loadCustomers();
-                                  if (mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text('✅ تم حذف ${customer.name}'),
-                                        backgroundColor: AppConstants.successColor,
-                                        behavior: SnackBarBehavior.floating,
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                      ),
-                                    );
-                                  }
-                                }
-                                return false;
-                              } else {
-                                await _editCustomer(customer);
-                                return false;
-                              }
-                            },
-                            child: _buildCustomerTile(customer),
-                          );
-                        },
                       ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          customer.name,
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                        if (customer.phone != null)
+                          Text(
+                            customer.phone!,
+                            style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              const Divider(),
+              const SizedBox(height: 8),
+              const Text(
+                'المواد المتبقية:',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: remaining.map((m) {
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withAlpha(26),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      '${m['materialName']}: ${(m['remaining'] as double).toStringAsFixed(2)}',
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                    ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.receipt, color: Colors.green),
+                    onPressed: () => Navigator.pushNamed(
+                      context,
+                      '/return_invoice',
+                      arguments: customer.id,
+                    ),
+                    tooltip: 'فاتورة إرجاع',
+                  ),
+                ],
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

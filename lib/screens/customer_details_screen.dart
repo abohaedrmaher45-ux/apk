@@ -5,7 +5,6 @@ import '../services/storage_service.dart';
 import '../models/customer.dart';
 import '../models/transaction.dart';
 import '../utils/app_constants.dart';
-import '../widgets/pdf_generator.dart';
 
 class CustomerDetailsScreen extends StatefulWidget {
   final int customerId;
@@ -17,10 +16,11 @@ class CustomerDetailsScreen extends StatefulWidget {
 
 class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
   final StorageService storage = StorageService.instance;
-  Customer? customer;
-  List<Transaction> transactions = [];
-  List<Map<String, dynamic>> remainingMaterials = [];
-  bool isLoading = true;
+  
+  Customer? _customer;
+  List<Transaction> _withdrawals = [];
+  Map<int, double> _returnedQuantities = {};
+  bool _isLoading = true;
 
   @override
   void initState() {
@@ -29,257 +29,181 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
   }
 
   Future<void> _loadData() async {
-    setState(() => isLoading = true);
-    try {
-      final customers = await storage.getCustomers();
-      customer = storage.getCustomerById(customers, widget.customerId);
-      transactions = await storage.getTransactionsByCustomer(widget.customerId);
-      remainingMaterials = await storage.getCustomerRemainingMaterials(widget.customerId);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('خطأ في تحميل البيانات: $e')),
-        );
+    setState(() => _isLoading = true);
+    
+    final customers = await storage.getCustomers();
+    _customer = storage.getCustomerById(customers, widget.customerId);
+    
+    // جلب جميع عمليات السحب لهذا العميل
+    _withdrawals = await storage.getWithdrawalsByCustomer(widget.customerId);
+    
+    // حساب الكمية المرتجعة لكل عملية سحب
+    final allTransactions = await storage.getTransactionsByCustomer(widget.customerId);
+    final returns = allTransactions.where((t) => t.type == TransactionType.return_).toList();
+    
+    for (var withdrawal in _withdrawals) {
+      double returned = 0;
+      for (var returnT in returns) {
+        if (returnT.linkedWithdrawalId == withdrawal.id) {
+          returned += returnT.quantity;
+        }
       }
-    } finally {
-      if (mounted) setState(() => isLoading = false);
+      _returnedQuantities[withdrawal.id] = returned;
     }
+    
+    setState(() => _isLoading = false);
   }
 
-  Future<void> _deleteTransaction(Transaction transaction) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('حذف معاملة'),
-        content: Text('هل أنت متأكد من حذف هذه ${transaction.type.name}؟'),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('حذف', style: TextStyle(color: AppConstants.dangerColor)),
-          ),
-        ],
-      ),
-    );
-    
-    if (confirmed == true) {
-      setState(() => isLoading = true);
-      await storage.deleteTransaction(transaction.id);
-      await _loadData();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('✅ تم الحذف')),
-        );
-      }
-    }
+  double getRemainingForWithdrawal(Transaction withdrawal) {
+    final returned = _returnedQuantities[withdrawal.id] ?? 0;
+    return withdrawal.quantity - returned;
   }
 
   @override
   Widget build(BuildContext context) {
-    if (isLoading) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('تفاصيل العميل')),
-        body: const Center(child: CircularProgressIndicator()),
-      );
-    }
-    
-    if (customer == null) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('تفاصيل العميل')),
-        body: const Center(child: Text('العميل غير موجود')),
-      );
-    }
-    
     return Scaffold(
-      appBar: AppBar(title: Text(customer!.name)),
-      body: SingleChildScrollView(
+      backgroundColor: const Color(0xFFF5F7FA),
+      appBar: AppBar(
+        title: Text(_customer?.name ?? 'تفاصيل العميل'),
+        backgroundColor: AppConstants.primaryColor,
+        foregroundColor: Colors.white,
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _customer == null
+              ? const Center(child: Text('العميل غير موجود'))
+              : _withdrawals.isEmpty
+                  ? const Center(child: Text('لا توجد عمليات سحب لهذا العميل'))
+                  : ListView.builder(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: _withdrawals.length,
+                      itemBuilder: (context, index) {
+                        final w = _withdrawals[index];
+                        final remaining = getRemainingForWithdrawal(w);
+                        return _buildWithdrawalCard(w, remaining);
+                      },
+                    ),
+    );
+  }
+
+  Widget _buildWithdrawalCard(Transaction withdrawal, double remaining) {
+    final isCompleted = remaining <= 0;
+    
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // بطاقة معلومات العميل
-            Card(
-              elevation: 4,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.person, size: 28, color: AppConstants.primaryColor),
-                        const SizedBox(width: 12),
-                        Text(
-                          customer!.name,
-                          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
-                    if (customer!.phone != null) ...[
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          const Icon(Icons.phone, size: 20, color: Colors.grey),
-                          const SizedBox(width: 8),
-                          Text(customer!.phone!),
-                        ],
-                      ),
-                    ],
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        const Icon(Icons.calendar_today, size: 20, color: Colors.grey),
-                        const SizedBox(width: 8),
-                        Text('تاريخ التسجيل: ${customer!.createdAt}'),
-                      ],
-                    ),
-                  ],
+            // رأس البطاقة
+            Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: isCompleted ? Colors.green.withAlpha(26) : AppConstants.primaryColor.withAlpha(26),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    isCompleted ? Icons.check_circle : Icons.inventory,
+                    color: isCompleted ? Colors.green : AppConstants.primaryColor,
+                    size: 24,
+                  ),
                 ),
-              ),
-            ),
-            
-            const SizedBox(height: 16),
-            
-            // الكميات المتبقية
-            if (remainingMaterials.isNotEmpty)
-              Card(
-                elevation: 4,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
+                const SizedBox(width: 12),
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Row(
-                        children: [
-                          Icon(Icons.inventory, color: AppConstants.accentColor),
-                          SizedBox(width: 8),
-                          Text('الكميات المتبقية', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                        ],
+                      Text(
+                        withdrawal.materialName,
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                       ),
-                      const Divider(height: 24),
-                      ...remainingMaterials.map((item) => Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(item['materialName'], style: const TextStyle(fontSize: 16)),
-                            Text(
-                              '${(item['remaining'] as double).toStringAsFixed(2)} ${AppConstants.getUnit(item['materialName'])}',
-                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppConstants.accentColor),
-                            ),
-                          ],
-                        ),
-                      )),
+                      Text(
+                        'تاريخ السحب: ${withdrawal.date}',
+                        style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                      ),
                     ],
                   ),
                 ),
-              ),
-            
-            const SizedBox(height: 16),
-            
-            // سجل المعاملات
-            Card(
-              elevation: 4,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.history, color: AppConstants.primaryColor),
-                        SizedBox(width: 8),
-                        Text('سجل المعاملات', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                      ],
+                if (isCompleted)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withAlpha(26),
+                      borderRadius: BorderRadius.circular(20),
                     ),
-                    const Divider(height: 24),
-                    if (transactions.isEmpty)
-                      const Center(child: Text('لا توجد معاملات', style: TextStyle(color: Colors.grey))),
-                    ...transactions.map((t) => _buildTransactionItem(t)),
-                  ],
-                ),
-              ),
+                    child: const Text(
+                      'مكتمل',
+                      style: TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+              ],
             ),
+            const SizedBox(height: 12),
+            const Divider(),
+            const SizedBox(height: 8),
             
-            const SizedBox(height: 16),
-            
-            // أزرار الإجراءات
-            ElevatedButton.icon(
-              onPressed: () => Navigator.pushNamed(context, '/return_invoice', arguments: widget.customerId).then((_) => _loadData()),
-              icon: const Icon(Icons.receipt),
-              label: const Text('فاتورة إرجاع جديدة', style: TextStyle(fontSize: 16)),
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 50),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              ),
-            ),
+            // التفاصيل
+            _buildDetailRow('الكمية المسحوبة:', '${withdrawal.quantity.toStringAsFixed(2)}'),
+            _buildDetailRow('الكمية المرتجعة:', '${(withdrawal.quantity - remaining).toStringAsFixed(2)}'),
+            _buildDetailRow('الكمية المتبقية:', '${remaining.toStringAsFixed(2)}', isRemaining: true),
+            _buildDetailRow('سعر الفرد:', '${withdrawal.pricePerUnit.toStringAsFixed(2)} ${AppConstants.currencySymbol}'),
+            _buildDetailRow('تاريخ العودة المتوقع:', withdrawal.returnDate ?? 'غير محدد'),
+            if (withdrawal.note != null) _buildDetailRow('ملاحظة:', withdrawal.note!),
             
             const SizedBox(height: 12),
             
-            OutlinedButton.icon(
-              onPressed: () async => PdfGenerator.generateCustomerReport(
-                customer: customer!,
-                transactions: transactions,
-                remainingMaterials: remainingMaterials,
+            // زر الإرجاع (إذا لم تكتمل الكمية)
+            if (!isCompleted)
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => Navigator.pushNamed(
+                    context,
+                    '/return_invoice',
+                    arguments: {
+                      'customerId': withdrawal.customerId,
+                      'withdrawalId': withdrawal.id,
+                      'materialName': withdrawal.materialName,
+                      'remainingQuantity': remaining,
+                    },
+                  ).then((_) => _loadData()),
+                  icon: const Icon(Icons.receipt, size: 18),
+                  label: const Text('إرجاع جزء من هذه المادة'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
               ),
-              icon: const Icon(Icons.picture_as_pdf),
-              label: const Text('تصدير تقرير PDF', style: TextStyle(fontSize: 16)),
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 50),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              ),
-            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildTransactionItem(Transaction t) {
-    final unit = AppConstants.getUnit(t.materialName);
-    final icon = t.type == TransactionType.withdrawal ? Icons.arrow_upward : Icons.arrow_downward;
-    final iconColor = t.type == TransactionType.withdrawal ? AppConstants.dangerColor : AppConstants.successColor;
-    
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: iconColor.withAlpha(26),
-          child: Icon(icon, color: iconColor),
-        ),
-        title: Text(
-          '${t.type.name} - ${t.materialName}',
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('الكمية: ${t.quantity.toStringAsFixed(2)} $unit'),
-            Text('التاريخ: ${t.date}'),
-            if (t.returnDate != null && t.type == TransactionType.withdrawal)
-              Text('تاريخ العودة: ${t.returnDate}', style: const TextStyle(color: AppConstants.secondaryColor)),
-            if (t.note != null)
-              Text('ملاحظة: ${t.note}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-          ],
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.edit, color: Colors.blue),
-              onPressed: () => Navigator.pushNamed(context, '/edit_transaction', arguments: t.id).then((_) => _loadData()),
+  Widget _buildDetailRow(String label, String value, {bool isRemaining = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: TextStyle(color: Colors.grey.shade600)),
+          Text(
+            value,
+            style: TextStyle(
+              fontWeight: isRemaining ? FontWeight.bold : FontWeight.normal,
+              color: isRemaining && double.tryParse(value.split(' ')[0]) != 0
+                  ? Colors.amber
+                  : null,
             ),
-            IconButton(
-              icon: const Icon(Icons.delete, color: AppConstants.dangerColor),
-              onPressed: () => _deleteTransaction(t),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
