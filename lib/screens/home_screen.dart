@@ -204,7 +204,7 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               _buildCustomerSection(),
               const SizedBox(height: 20),
-              _buildMaterialSection(),
+              _buildMaterialSection(),  // ⚠️ هذه الدالة يجب أن تظهر الحقول
               const SizedBox(height: 20),
               AnimatedSummary(
                 quantity: _quantity,
@@ -234,7 +234,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: AppConstants.primaryColor.withOpacity(0.1),
+                    color: AppConstants.primaryColor.withAlpha(26),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(
@@ -252,7 +252,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 20),
             
-            // Custom Toggle Widget
             CustomToggle(
               isNewCustomer: _isNewCustomer,
               onToggle: (value) {
@@ -318,6 +317,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // ⚠️ هذه الدالة هي المسؤولة عن عرض حقول السحب
   Widget _buildMaterialSection() {
     return Card(
       elevation: 4,
@@ -332,7 +332,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: AppConstants.primaryColor.withOpacity(0.1),
+                    color: AppConstants.primaryColor.withAlpha(26),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(
@@ -350,7 +350,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 20),
             
-            // نوع المادة - كتابة يدوية
+            // ✅ 1. نوع المادة (كتابة يدوية)
             TextFormField(
               controller: _materialController,
               decoration: const InputDecoration(
@@ -365,7 +365,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 16),
             
-            // Quantity Slider Widget
+            // ✅ 2. الكمية (QuantitySlider)
             QuantitySlider(
               maxQuantity: 1000,
               initialValue: _quantity,
@@ -379,7 +379,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 16),
             
-            // سعر الفرد
+            // ✅ 3. سعر الفرد
             TextFormField(
               controller: _priceController,
               decoration: InputDecoration(
@@ -402,7 +402,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 16),
             
-            // الخصم
+            // ✅ 4. الخصم
             TextFormField(
               controller: _discountController,
               decoration: const InputDecoration(
@@ -417,7 +417,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 16),
             
-            // التواريخ
+            // ✅ 5. التواريخ (تاريخ البدء وتاريخ العودة)
             Row(
               children: [
                 Expanded(
@@ -498,7 +498,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 16),
             
-            // ملاحظة
+            // ✅ 6. ملاحظة
             TextFormField(
               controller: _noteController,
               decoration: const InputDecoration(
