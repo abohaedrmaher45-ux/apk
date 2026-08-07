@@ -1,0 +1,45 @@
+name: Build iOS Release IPA
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch: # يتيح لك تشغيل البناء يدوياً من GitHub
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+
+    steps:
+      # 1. جلب الكود من المستودع
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # 2. إعداد بيئة Flutter
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      # 3. تثبيت حزم المشروعات (Dependencies)
+      - name: Install Dependencies
+        run: flutter pub get
+
+      # 4. بناء تطبيق iOS بصيغة Release بدون توقيع (Unsigned Release Build)
+      - name: Build iOS App
+        run: flutter build ios --release --no-codesign
+
+      # 5. ضغط الملفات وتحويلها إلى صيغة IPA لتسهيل التثبيت
+      - name: Package IPA
+        run: |
+          cd build/ios/iphoneos
+          mkdir Payload
+          mv Runner.app Payload/
+          zip -r app-release.ipa Payload
+
+      # 6. رفع ملف الـ IPA كـ Artifact على GitHub لتقوم بتحميله
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-release-app
+          path: build/ios/iphoneos/app-release.ipa
